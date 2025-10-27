@@ -3,26 +3,27 @@ set -euo pipefail
 
 # ---------------------------------------------
 # Usage:
-#   ./compile-with-docker.sh [Preset]
-# Example:
+#   ./compile-with-docker.sh [Preset] [CMake options...]
+# Examples:
 #   ./compile-with-docker.sh Custom
-#   ./compile-with-docker.sh Bandscope
-#   ./compile-with-docker.sh Broadcast
-#   ./compile-with-docker.sh Basic
-#   ./compile-with-docker.sh RescueOps
-#   ./compile-with-docker.sh Game
+#   ./compile-with-docker.sh Bandscope -DENABLE_SPECTRUM=ON
+#   ./compile-with-docker.sh Broadcast -DENABLE_FEAT_F4HWN_GAME=ON -DENABLE_NOAA=ON
 # Default preset: "Custom"
 # ---------------------------------------------
 
 IMAGE=uvk1-uvk5v3
 PRESET=${1:-Custom}
+shift || true  # remove preset from arguments if present
+
+# Any remaining args will be treated as CMake cache variables
+EXTRA_ARGS=("$@")
 
 # ---------------------------------------------
 # Validate preset name
 # ---------------------------------------------
-if [[ ! "$PRESET" =~ ^(Custom|Bandscope|Broadcast|Basic|RescueOps|Game)$ ]]; then
+if [[ ! "$PRESET" =~ ^(Custom|Bandscope|Broadcast|Basic|RescueOps|Game|all)$ ]]; then
   echo "❌ Unknown preset: '$PRESET'"
-  echo "Valid presets are: Custom, Bandscope, Broadcast, Basic, RescueOps, Game"
+  echo "Valid presets are: Custom, Bandscope, Broadcast, Basic, RescueOps, Game, all"
   exit 1
 fi
 
@@ -37,10 +38,15 @@ docker build -t "$IMAGE" .
 rm -rf build
 
 # ---------------------------------------------
-# Run CMake inside the container with the selected preset
+# Function to build one preset
 # ---------------------------------------------
-docker run --rm -it -v "$PWD":/src -w /src "$IMAGE" \
-  bash -c "which arm-none-eabi-gcc && arm-none-eabi-gcc --version && \
-           echo '=== Building preset: ${PRESET} ===' && \
-           cmake --preset ${PRESET} && \
-           cmake --build --preset ${PRESET} -j"
+build_preset() {
+  local preset="$1"
+  echo "=== 🚀 Building preset: ${preset} ==="
+  docker run --rm -it -v "$PWD":/src -w /src "$IMAGE" \
+    bash -c "which arm-none-eabi-gcc && arm-none-eabi-gcc --version && \
+             cmake --preset ${preset} ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} && \
+             cmake --build --preset ${preset} -j"
+}
+
+build_preset "$PRESET"
