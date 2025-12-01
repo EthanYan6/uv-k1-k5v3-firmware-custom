@@ -589,6 +589,11 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     #ifdef ENABLE_FEAT_F4HWN_GAME
     else if(Key == 7)
     {
+        #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+            if(gEeprom.MENU_LOCK == true) {
+                return;
+            }
+        #endif
         APP_RunBreakout();
         return;
     }
