@@ -95,10 +95,7 @@ From the unbrick_k5_v1 directory:
 #### Option B — Run the OpenOCD command manually
 
 `
-openocd \ 
-  -f ./interface/stlink.cfg 
-  -f ./target/dp32g030.cfg \
-  -c "init; reset halt; uv_flash_bl bootloader.bin; shutdown"
+openocd -f ./interface/stlink.cfg -f ./target/dp32g030.cfg -c "init; reset halt; uv_flash_bl bootloader.bin; shutdown"
 `
 
 
