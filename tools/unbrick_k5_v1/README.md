@@ -114,6 +114,15 @@ If no errors appear, the bootloader has been successfully restored.
 
 The device should now start correctly on DFU mode again. You can then flash stock firmware, or the [F4HWN firmware for UV-K5 V1](https://github.com/armel/uv-k5-firmware-custom) (not the Fusion 🔥 Edition).
 
+# Helpful Videos
+
+Here are two videos that can assist you during the unbricking process. If you’re new to ST-LINK, OpenOCD, or SWD debugging, these will give you a clear visual overview:
+
+- [Your UV-K5 V1 is bricked? 🫣 Here’s how to fix it 😌](https://www.youtube.com/watch?v=4cWtYH_bpro) by F4HWN
+- [UNBRICK - Process Windows Quansheng UV-K5 , K6](https://www.youtube.com/watch?v=EmF08o5MIE0) by M0FXB
+
+These resources are not mandatory, but they can make the procedure much easier to follow.
+
 # Disclaimer
 
 This procedure requires opening the device and directly manipulating its microcontroller over SWD. Incorrect use may permanently damage the radio. Proceed at your own risk.

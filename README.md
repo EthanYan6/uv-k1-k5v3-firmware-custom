@@ -342,11 +342,11 @@ Click `Restore Calibration Data` and wait until the process fully completes.
 Many thanks to various people:
 
 * [Muzkr](https://github.com/muzkr)
+* [Andrej](https://github.com/Tunas1337)
 * [Egzumer](https://github.com/egzumer)
 * [OneOfEleven](https://github.com/OneOfEleven)
 * [DualTachyon](https://github.com/DualTachyon)
 * [Mikhail](https://github.com/fagci)
-* [Andrej](https://github.com/Tunas1337)
 * [Manuel](https://github.com/manujedi)
 * @wagner
 * @Lohtse Shar
