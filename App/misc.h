@@ -39,7 +39,7 @@
 #define FM_CHANNELS_MAX 48
 #define MR_CHANNELS_MAX 768
 #define MR_CHANNELS_LIST 9
-#define MENU_ITEMS 67
+#define MENU_ITEMS 68
 
 
 #define IS_MR_CHANNEL(x)       ((x) >= MR_CHANNEL_FIRST && (x) <= MR_CHANNEL_LAST)
