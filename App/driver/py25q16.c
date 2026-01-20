@@ -261,6 +261,9 @@ void PY25Q16_WriteBuffer(uint32_t Address, const void *pBuffer, uint32_t Size, b
 
     while (Size)
     {
+        // CRITICAL FIX #1: Wait for flash ready before processing each sector
+        WaitWIP();
+
         if (Size < SecSize)
         {
             SecSize = Size;
@@ -289,6 +292,10 @@ void PY25Q16_WriteBuffer(uint32_t Address, const void *pBuffer, uint32_t Size, b
             if (Erase)
             {
                 SectorErase(SecAddr);
+
+                // CRITICAL FIX #2: Erase takes ~300ms, must complete before program starts
+                WaitWIP();
+
                 if (Append)
                 {
                     SectorProgram(SecAddr, SectorCache, SecOffset + SecSize);
@@ -313,6 +320,9 @@ void PY25Q16_WriteBuffer(uint32_t Address, const void *pBuffer, uint32_t Size, b
         SecOffset = 0;
         SecSize = SECTOR_SIZE;
     } // while
+
+    // CRITICAL FIX #3: Ensure all writes complete before function returns
+    WaitWIP();
 }
 
 void PY25Q16_SectorErase(uint32_t Address)
