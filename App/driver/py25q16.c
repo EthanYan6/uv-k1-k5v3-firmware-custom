@@ -25,6 +25,7 @@
 #include "driver/system.h"
 #include "driver/systick.h"
 #include "external/printf/printf.h"
+#include "misc.h"
 
 // #define DEBUG
 
@@ -254,6 +255,11 @@ void PY25Q16_WriteBuffer(uint32_t Address, const void *pBuffer, uint32_t Size, b
 #ifdef DEBUG
     printf("spi flash write: %06x %ld %d\n", Address, Size, Append);
 #endif
+
+    #ifdef ENABLE_FEAT_F4HWN_DEBUG
+        gDebug++;
+    #endif
+
     uint32_t SecIndex = Address / SECTOR_SIZE;
     uint32_t SecAddr = SecIndex * SECTOR_SIZE;
     uint32_t SecOffset = Address % SECTOR_SIZE;

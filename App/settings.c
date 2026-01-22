@@ -312,11 +312,12 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
     }
 
     // 0D60..0E27
+    /*
     PY25Q16_ReadBuffer(0x008000, gMR_ChannelAttributes, sizeof(gMR_ChannelAttributes));
     uint16_t count = ARRAY_SIZE(gMR_ChannelAttributes);
 
     for (uint16_t i = 0; i < count; i++) {
-        ChannelAttributes_t *att = &gMR_ChannelAttributes[i];
+        ChannelAttributes_t *att = MR_GetChannelAttributes(i);
 
         if (att->__val == 0xFFFF) {
             att->__val = 0;
@@ -325,6 +326,27 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
         else
         {
             att->exclude = 0;
+        }
+    }
+    */
+
+    // Init attr cache
+    MR_InitChannelAttributesCache();
+
+    // Load and check channel
+    for (uint16_t i = 0; i < MR_CHANNELS_MAX + 7; i++) {
+        ChannelAttributes_t *att = MR_GetChannelAttributes(i);
+        
+        if (att != NULL) {
+            if (att->__val == 0xFFFF) {
+                att->__val = 0;
+                att->band = 0x7;
+                MR_SetChannelAttributes(i, att);  // ⭐ IMPORTANT: Sauvegarder!
+            }
+            else {
+                att->exclude = 0;
+                MR_SetChannelAttributes(i, att);  // ⭐ IMPORTANT: Sauvegarder!
+            }
         }
     }
 
@@ -588,27 +610,39 @@ void SETTINGS_SaveFM(void)
 
 void SETTINGS_SaveVfoIndices(void)
 {
-    uint16_t Data16[8];
-
-    #ifndef ENABLE_NOAA
-        PY25Q16_ReadBuffer(0x00A010, Data16, sizeof(Data16));
-    #endif
-
-    Data16[0] = gEeprom.ScreenChannel[0];
-    Data16[1] = gEeprom.MrChannel[0];
-    Data16[2] = gEeprom.FreqChannel[0];
-    Data16[3] = gEeprom.ScreenChannel[1];
-    Data16[4] = gEeprom.MrChannel[1];
-    Data16[5] = gEeprom.FreqChannel[1];
-
-#ifdef ENABLE_NOAA
-    Data16[6] = gEeprom.NoaaChannel[0];
-    Data16[7] = gEeprom.NoaaChannel[1];
-#endif
-
-    PY25Q16_WriteBuffer(0x00A010, Data16, sizeof(Data16), false);
+    gVfoStateChanged = true;
+    gVfoSaveCountdown_10ms = 2;
 }
 
+void SETTINGS_SaveVfoIndicesFlush(void)
+{
+    if (gScheduleVfoSave) {
+        gScheduleVfoSave = false;
+        
+        if (gVfoStateChanged) {
+            gVfoStateChanged = false;
+            uint16_t Data16[8];
+
+            #ifndef ENABLE_NOAA
+                PY25Q16_ReadBuffer(0x00A010, Data16, sizeof(Data16));
+            #endif
+
+            Data16[0] = gEeprom.ScreenChannel[0];
+            Data16[1] = gEeprom.MrChannel[0];
+            Data16[2] = gEeprom.FreqChannel[0];
+            Data16[3] = gEeprom.ScreenChannel[1];
+            Data16[4] = gEeprom.MrChannel[1];
+            Data16[5] = gEeprom.FreqChannel[1];
+
+        #ifdef ENABLE_NOAA
+            Data16[6] = gEeprom.NoaaChannel[0];
+            Data16[7] = gEeprom.NoaaChannel[1];
+        #endif
+
+            PY25Q16_WriteBuffer(0x00A010, Data16, sizeof(Data16), false);
+        }
+    }
+}
 
 void SETTINGS_SaveSettings(void)
 {
@@ -1011,7 +1045,7 @@ void SETTINGS_UpdateChannel(uint16_t channel, const VFO_Info_t *pVFO, bool keep,
             PY25Q16_WriteBuffer(0x008000, buf, sizeof(buf), false);
         }
 
-        gMR_ChannelAttributes[channel] = att;
+        MR_SetChannelAttributes(channel, &att);
 
         if (IS_MR_CHANNEL(channel)) {   // it's a memory channel
             if (!keep) {

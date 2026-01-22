@@ -63,7 +63,7 @@ static void toggle_chan_scanlist(void)
         return;
     }
     
-    ChannelAttributes_t *att = &gMR_ChannelAttributes[gTxVfo->CHANNEL_SAVE];
+    ChannelAttributes_t *att = MR_GetChannelAttributes(gTxVfo->CHANNEL_SAVE);
 
     // Remove exclude
     if(att->exclude == true)
@@ -389,11 +389,11 @@ void channelMoveSwitch(void) {
             Channel = (Channel * 10) + gInputBox[i];
         }
 
-        if ((Channel == 0) && (gInputBoxIndex != 3)) {
+        if ((Channel == 0) && (gInputBoxIndex != 4)) {
             return;
         }
 
-        if (gInputBoxIndex == 3) {
+        if (gInputBoxIndex == 4) {
             gInputBoxIndex = 0;
             gKeyInputCountdown = 1;
 
@@ -747,7 +747,7 @@ static void MAIN_Key_MENU(bool bKeyPressed, bool bKeyHeld)
             {
                 if(FUNCTION_IsRx() || gScanPauseDelayIn_10ms > 9)
                 {
-                    ChannelAttributes_t *att = &gMR_ChannelAttributes[lastFoundFrqOrChan];
+                    ChannelAttributes_t *att = MR_GetChannelAttributes(lastFoundFrqOrChan);
                     att->exclude = true;
 
                     gVfoConfigureMode = VFO_CONFIGURE;

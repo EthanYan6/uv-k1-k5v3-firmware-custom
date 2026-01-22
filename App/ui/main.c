@@ -810,9 +810,9 @@ void UI_DisplayMain(void)
             const unsigned int x = 3;
             const bool inputting = gInputBoxIndex != 0 && gEeprom.TX_VFO == vfo_num;
             if (!inputting || gScanStateDir != SCAN_OFF)
-                sprintf(String, "M%03u", gEeprom.ScreenChannel[vfo_num] + 1);
+                sprintf(String, "%04u", gEeprom.ScreenChannel[vfo_num] + 1);
             else
-                sprintf(String, "M%.3s", INPUTBOX_GetAscii());  // show the input text
+                sprintf(String, "%.4s", INPUTBOX_GetAscii());  // show the input text
             UI_PrintStringSmallNormalInverse(String, x, 0, line + 1);
         }
         else if (IS_FREQ_CHANNEL(gEeprom.ScreenChannel[vfo_num]))
@@ -890,15 +890,15 @@ void UI_DisplayMain(void)
                     if(gEeprom.MENU_LOCK == false) {
                 #endif
 
-                const ChannelAttributes_t att = gMR_ChannelAttributes[gEeprom.ScreenChannel[vfo_num]];
+                const ChannelAttributes_t* att = MR_GetChannelAttributes(gEeprom.ScreenChannel[vfo_num]);
 
 
-                if(att.exclude == false)
+                if(att->exclude == false)
                 {
                     // show the scan list assigment symbols
-                    const ChannelAttributes_t att = gMR_ChannelAttributes[gEeprom.ScreenChannel[vfo_num]];
+                    const ChannelAttributes_t* att = MR_GetChannelAttributes(gEeprom.ScreenChannel[vfo_num]);
 
-                    uint8_t countList = att.scanlist;
+                    uint8_t countList = att->scanlist;
                     if(countList > MR_CHANNELS_LIST + 1) {
                         countList = 0;
                     }
@@ -941,7 +941,7 @@ void UI_DisplayMain(void)
 
                 // compander symbol
 #ifndef ENABLE_BIG_FREQ
-                if (att.compander)
+                if (att->compander)
                     memcpy(p_line0 + 120 + LCD_WIDTH, BITMAP_compand, sizeof(BITMAP_compand));
 #else
                 // TODO:  // find somewhere else to put the symbol
@@ -1058,8 +1058,8 @@ void UI_DisplayMain(void)
                 }
 
                 // show the channel symbols
-                const ChannelAttributes_t att = gMR_ChannelAttributes[gEeprom.ScreenChannel[vfo_num]];
-                if (att.compander)
+                const ChannelAttributes_t* att = MR_GetChannelAttributes(gEeprom.ScreenChannel[vfo_num]);
+                if (att->compander)
 #ifdef ENABLE_BIG_FREQ
                     memcpy(p_line0 + 120, BITMAP_compand, sizeof(BITMAP_compand));
 #else

@@ -56,8 +56,8 @@ const char gModulationStr[MODULATION_UKNOWN][4] = {
 bool RADIO_CheckValidList(uint8_t scanList)
 {
     for (uint16_t i = 0; IS_MR_CHANNEL(i); i++) {
-        const ChannelAttributes_t att = gMR_ChannelAttributes[i];
-        if(att.scanlist == scanList && att.exclude == false)
+        const ChannelAttributes_t* att = MR_GetChannelAttributes(i);
+        if(att->scanlist == scanList && att->exclude == false)
         {
             return true;
         }
@@ -67,18 +67,18 @@ bool RADIO_CheckValidList(uint8_t scanList)
 
 bool RADIO_CheckValidChannel(uint16_t channel, bool checkScanList, uint8_t scanList)
 {
-    const ChannelAttributes_t att = gMR_ChannelAttributes[channel];
+    const ChannelAttributes_t* att = MR_GetChannelAttributes(channel);
 
     // return true if the channel appears valid
     if (!IS_MR_CHANNEL(channel))
         return false;
-    if (checkScanList && att.exclude == true)
+    if (checkScanList && att->exclude == true)
         return false;
-    if (att.band > BAND7_470MHz)
+    if (att->band > BAND7_470MHz)
         return false;
-    if (!checkScanList || (scanList > MR_CHANNELS_LIST && att.scanlist != 0))
+    if (!checkScanList || (scanList > MR_CHANNELS_LIST && att->scanlist != 0))
         return true;
-    if ((scanList == 0) || (scanList != att.scanlist)) {
+    if ((scanList == 0) || (scanList != att->scanlist)) {
         return false;
     }
     
@@ -183,8 +183,8 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
     else
         channel = FREQ_CHANNEL_LAST - 1;
 
-    ChannelAttributes_t att = gMR_ChannelAttributes[channel];
-    if (att.__val == 0xFFFF) { // invalid/unused channel
+    ChannelAttributes_t* att = MR_GetChannelAttributes(channel);
+    if (att->__val == 0xFFFF) { // invalid/unused channel
         if (IS_MR_CHANNEL(channel)) {
             channel                    = gEeprom.FreqChannel[VFO];
             gEeprom.ScreenChannel[VFO] = channel;
@@ -195,7 +195,7 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
         return;
     }
 
-    uint8_t band = att.band;
+    uint8_t band = att->band;
     if (band > BAND7_470MHz) {
         band = BAND6_400MHz;
     }
@@ -203,7 +203,7 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
     uint8_t bParticipation;
 
     if (IS_MR_CHANNEL(channel)) {
-        bParticipation = att.scanlist;
+        bParticipation = att->scanlist;
     }
     else {
         band = channel - FREQ_CHANNEL_FIRST;
@@ -398,7 +398,7 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
             pConfig->Frequency = 43300000;
     }
 
-    pVfo->Compander = att.compander;
+    pVfo->Compander = att->compander;
 
     #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
     if(gRemoveOffset)

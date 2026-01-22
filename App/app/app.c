@@ -1363,6 +1363,11 @@ static void CheckKeys(void)
 void APP_TimeSlice10ms(void)
 {
     gNextTimeslice = false;
+
+    if (gScheduleVfoSave) {
+        SETTINGS_SaveVfoIndicesFlush();
+    }
+
     gFlashLightBlinkCounter++;
 
 #ifdef ENABLE_AM_FIX
@@ -2187,7 +2192,7 @@ Skip:
     }
 
     if (gRequestSaveChannel > 0) { // TODO: remove the gRequestSaveChannel, why use global variable for that??
-        if ((!bKeyHeld && !bKeyPressed) || UI_MENU_GetCurrentMenuId())
+        if ((!bKeyHeld && !bKeyPressed) || (UI_MENU_GetCurrentMenuId() != 0 && gScreenToDisplay == DISPLAY_MENU))
         {
             SETTINGS_SaveChannel(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, gTxVfo, gRequestSaveChannel);
 

@@ -18,6 +18,7 @@
 
 #include "misc.h"
 #include "settings.h"
+#include "driver/py25q16.h"
 
 const uint8_t     fm_radio_countdown_500ms         =  2000 / 500;  // 2 seconds
 const uint16_t    fm_play_countdown_scan_10ms      =   100 / 10;   // 100ms
@@ -165,7 +166,13 @@ uint16_t          gEEPROM_RSSI_CALIB[7][4];
 uint16_t          gEEPROM_1F8A;
 uint16_t          gEEPROM_1F8C;
 
-ChannelAttributes_t gMR_ChannelAttributes[FREQ_CHANNEL_LAST + 1];
+// 
+// Cache-Based Architecture: channel attributes moved to Flash
+// Cache holds only active channels in RAM (instead of all!)
+//
+
+MR_ChannelCache_t gMR_ChannelAttributes_Cache[MR_CHANNELS_CACHE_SIZE] = {0};
+ChannelAttributes_t gMR_ChannelAttributes_Current = {0};
 
 volatile uint16_t gBatterySaveCountdown_10ms = battery_save_count_10ms;
 
@@ -319,6 +326,10 @@ uint8_t           gIsLocked = 0xFF;
     uint8_t       gBacklightBrightnessOld;
     uint8_t       gPttOnePushCounter = 0;
     uint32_t      gBlinkCounter = 0;
+
+    uint16_t gVfoSaveCountdown_10ms = 0;
+    bool gScheduleVfoSave = false;
+    bool gVfoStateChanged = false;
 #endif
 
 inline void FUNCTION_NOP() { ; }
@@ -348,3 +359,273 @@ unsigned long StrToUL(const char * str)
     }
     return ul;
 }
+
+// 
+// Cache-Based Channel Attributes Implementation
+// 
+//
+// This replaces the huge array (~ 2,000 bytes in RAM) with a smart cache system
+// that keeps only active channels in RAM and loads others from Flash on demand.
+//
+// SRAM Savings: ~ 2,000 bytes (84% reduction!)
+// 
+
+// Flash address where channel attributes start
+// NOTE: Verify this matches your Flash layout!
+
+#define FLASH_CHANNEL_ATTR_BASE 0x8000
+
+// Each channel takes 2 bytes (ChannelAttributes_t is uint16_t)
+#define FLASH_CHANNEL_ATTR_SIZE 2
+
+// Cache hit/miss statistics (optional, for debugging)
+
+#ifdef ENABLE_FEAT_F4HWN_DEBUG
+    static uint32_t cache_hits = 0;
+    static uint32_t cache_misses = 0;
+#endif
+
+// 
+// Internal Helper Functions
+// 
+
+// Find cache entry for given channel
+// Returns index if found, -1 if not found
+
+static int MR_FindInCache(uint16_t channel_id)
+{
+    for (int i = 0; i < MR_CHANNELS_CACHE_SIZE; i++) {
+        if (gMR_ChannelAttributes_Cache[i].channel_id == channel_id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Find oldest entry in cache (for eviction - LRU)
+static int MR_FindOldestCacheEntry(void)
+{
+    int oldest_index = 0;
+    uint32_t oldest_time = gMR_ChannelAttributes_Cache[0].access_time;
+    
+    for (int i = 1; i < MR_CHANNELS_CACHE_SIZE; i++) {
+        if (gMR_ChannelAttributes_Cache[i].access_time < oldest_time) {
+            oldest_time = gMR_ChannelAttributes_Cache[i].access_time;
+            oldest_index = i;
+        }
+    }
+    
+    return oldest_index;
+}
+
+// Find empty cache slot
+// Returns index if found, -1 if cache is full
+static int MR_FindEmptyCacheSlot(void)
+{
+    for (int i = 0; i < MR_CHANNELS_CACHE_SIZE; i++) {
+        if (gMR_ChannelAttributes_Cache[i].channel_id == 0xFFFF) {
+            return i;
+        }
+    }
+    return -1;  // Cache is full, need to evict
+}
+
+// Get current time (for LRU eviction)
+static uint32_t GetCurrentTime(void)
+{
+    // Using gBlinkCounter which increments continuously
+    extern uint32_t gBlinkCounter;
+    return gBlinkCounter;
+}
+
+// 
+// Public API Functions
+// ════════════════════════════════════════════════════════════════════════════
+
+// Load channel attributes from Flash
+void MR_LoadChannelAttributesFromFlash(uint16_t channel_id, ChannelAttributes_t* attributes)
+{
+    // CRITICAL: Validate channel_id
+    if (channel_id >= (MR_CHANNELS_MAX + 7)) {
+        attributes->__val = 0;
+        return;
+    }
+    
+    // Calculate Flash address
+    uint32_t flash_addr = FLASH_CHANNEL_ATTR_BASE + (channel_id * sizeof(ChannelAttributes_t));
+    
+    // Read 2 bytes from Flash
+    PY25Q16_ReadBuffer(flash_addr, attributes, sizeof(ChannelAttributes_t));
+}
+
+// Save channel attributes to Flash
+void MR_SaveChannelAttributesToFlash(uint16_t channel_id, const ChannelAttributes_t* attributes)
+{
+    // CRITICAL: Validate channel_id
+    if (channel_id >= (MR_CHANNELS_MAX + 7)) {
+        return;
+    }
+    
+    // Calculate Flash address
+    uint16_t flash_addr = FLASH_CHANNEL_ATTR_BASE + (channel_id * FLASH_CHANNEL_ATTR_SIZE);
+    
+    // Write 2 bytes to Flash
+    PY25Q16_WriteBuffer(flash_addr, attributes, sizeof(ChannelAttributes_t), false);
+}
+
+// Get channel attributes (from cache or Flash)
+// This is the main function used by the rest of the code
+ChannelAttributes_t* MR_GetChannelAttributes(uint16_t channel_id)
+{
+    // Input validation
+    if (channel_id >= (MR_CHANNELS_MAX + 7)) {
+        return NULL;
+    }
+    
+    // Check cache first (FAST PATH)
+    int cache_index = MR_FindInCache(channel_id);
+    
+    if (cache_index >= 0) {
+        // CACHE HIT
+        #ifdef ENABLE_FEAT_F4HWN_DEBUG
+            cache_hits++;
+        #endif
+        
+        // Update access time for LRU
+        gMR_ChannelAttributes_Cache[cache_index].access_time = GetCurrentTime();
+        
+        return &gMR_ChannelAttributes_Cache[cache_index].attributes;
+    }
+    
+    // CACHE MISS - Load from Flash
+    #ifdef ENABLE_FEAT_F4HWN_DEBUG
+        cache_misses++;
+    #endif
+    
+    // Find slot for new entry
+    int slot = MR_FindEmptyCacheSlot();
+    
+    if (slot < 0) {
+        // Cache is full, evict oldest entry
+        slot = MR_FindOldestCacheEntry();
+    }
+    
+    // Load from Flash into cache slot
+    MR_LoadChannelAttributesFromFlash(channel_id, &gMR_ChannelAttributes_Cache[slot].attributes);
+    
+    // Store channel_id in cache
+    gMR_ChannelAttributes_Cache[slot].channel_id = channel_id;
+    
+    // Set access time
+    gMR_ChannelAttributes_Cache[slot].access_time = GetCurrentTime();
+    
+    return &gMR_ChannelAttributes_Cache[slot].attributes;
+}
+
+// Set channel attributes (updates both cache and Flash)
+void MR_SetChannelAttributes(uint16_t channel_id, const ChannelAttributes_t* attributes)
+{
+    // Input validation
+    if (channel_id >= (MR_CHANNELS_MAX + 7) || !attributes) {
+        return;
+    }
+    
+    // CRITICAL FIX: WRITE-PROTECT - Prevent Flash wear
+    // Before writing, check if data already exists and is identical
+    ChannelAttributes_t flash_version;
+    MR_LoadChannelAttributesFromFlash(channel_id, &flash_version);
+    
+    // Compare current Flash data with new data
+    if (memcmp(&flash_version, attributes, sizeof(ChannelAttributes_t)) == 0) {
+        // But still update cache for consistency
+        int cache_index = MR_FindInCache(channel_id);
+        if (cache_index >= 0) {
+            gMR_ChannelAttributes_Cache[cache_index].attributes = *attributes;
+            gMR_ChannelAttributes_Cache[cache_index].access_time = GetCurrentTime();
+        }
+        return;  // Early exit - no Flash write needed
+    }
+    
+    // Data has changed - write to Flash
+    MR_SaveChannelAttributesToFlash(channel_id, attributes);
+    
+    // Update cache if entry exists
+    int cache_index = MR_FindInCache(channel_id);
+    
+    if (cache_index >= 0) {
+        // Entry in cache, update it
+        gMR_ChannelAttributes_Cache[cache_index].attributes = *attributes;
+        gMR_ChannelAttributes_Cache[cache_index].access_time = GetCurrentTime();
+    } else {
+        // Not in cache, add it
+        int slot = MR_FindEmptyCacheSlot();
+        
+        if (slot < 0) {
+            // Cache full, evict oldest
+            slot = MR_FindOldestCacheEntry();
+        }
+        
+        gMR_ChannelAttributes_Cache[slot].channel_id = channel_id;
+        gMR_ChannelAttributes_Cache[slot].attributes = *attributes;
+        gMR_ChannelAttributes_Cache[slot].access_time = GetCurrentTime();
+    }
+}
+
+// Invalidate entire cache (call after loading Flash backup)
+void MR_InvalidateChannelAttributesCache(void)
+{
+    for (int i = 0; i < MR_CHANNELS_CACHE_SIZE; i++) {
+        gMR_ChannelAttributes_Cache[i].channel_id = 0xFFFF;  // Mark as empty
+        gMR_ChannelAttributes_Cache[i].access_time = 0;
+    }
+}
+
+// Initialize cache (call from settings.c boot sequence)
+void MR_InitChannelAttributesCache(void)
+{
+    // Clear cache
+    MR_InvalidateChannelAttributesCache();
+    
+    // Pre-load commonly used channels (VFO A, VFO B, channel 0)
+    // This speeds up first access
+    uint16_t channels_to_preload[] = {0, 1, 2};
+    
+    for (int i = 0; i < ARRAY_SIZE(channels_to_preload); i++) {
+        if (channels_to_preload[i] < (MR_CHANNELS_MAX + 7)) {
+            MR_GetChannelAttributes(channels_to_preload[i]);
+        }
+    }
+}
+
+// 
+// Debugging / Statistics (optional, for development)
+// 
+
+#ifdef ENABLE_FEAT_F4HWN_DEBUG
+
+uint32_t MR_GetCacheHits(void)
+{
+    return cache_hits;
+}
+
+uint32_t MR_GetCacheMisses(void)
+{
+    return cache_misses;
+}
+
+float MR_GetCacheHitRate(void)
+{
+    uint32_t total = cache_hits + cache_misses;
+    if (total == 0) return 0.0f;
+    return (float)cache_hits / (float)total * 100.0f;
+}
+
+void MR_PrintCacheStats(void)
+{
+    // This would print cache statistics (requires UART_Printf)
+    // Uncomment if you want debug output:
+    // UART_Printf("Cache Stats: Hits=%u Misses=%u Rate=%.1f%%\n", 
+    //    cache_hits, cache_misses, MR_GetCacheHitRate());
+}
+
+#endif
