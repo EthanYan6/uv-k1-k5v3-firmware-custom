@@ -18,7 +18,16 @@
 #include "driver/st7565.h"
 #include "screenshot.h"
 #include "misc.h"
-#include <string.h>
+#include "driver/vcp.h"
+
+static void Screenshot_Send(const uint8_t *buf, uint16_t len)
+{
+    if (gUSB_ScreenshotEnabled) {
+        cdc_acm_data_send_with_dtr(buf, len);
+    } else {
+        UART_Send(buf, len);
+    }
+}
 
 // SRAM optimization: minimize static allocations
 // - previousFrame: 1024 bytes (REQUIRED - need to compare for delta)
@@ -43,6 +52,12 @@ void getScreenShot(bool force)
 
     if (UART_IsCableConnected()) {
         keepAlive = 10;
+        gUSB_ScreenshotEnabled = false;
+    }
+
+    if (VCP_ScreenshotPing()) {
+        keepAlive = 10;
+        gUSB_ScreenshotEnabled = true;
     }
 
     if (keepAlive > 0) {
@@ -114,7 +129,7 @@ void getScreenShot(bool force)
     // New format: sends 0xFF before header
     // Old format: doesn't exist, so viewers can differentiate
     uint8_t versionMarker = 0xFF;
-    UART_Send(&versionMarker, 1);
+    Screenshot_Send(&versionMarker, 1);
 
     // ==== Send header ====
     uint8_t header[5] = {
@@ -123,7 +138,7 @@ void getScreenShot(bool force)
         (uint8_t)(deltaLen & 0xFF)
     };
 
-    UART_Send(header, 5);
+    Screenshot_Send(header, 5);
 
     // ==== SECOND PASS: Send only changed chunks ====
     uint8_t chunk[9];
@@ -136,12 +151,12 @@ void getScreenShot(bool force)
         chunk[0] = chunkIdx;
         memcpy(&chunk[1], cur, 8);
         
-        UART_Send(chunk, 9);
+        Screenshot_Send(chunk, 9);
         
         // Update previousFrame for next comparison
         memcpy(prev, cur, 8);
     }
 
     uint8_t end = 0x0A;
-    UART_Send(&end, 1);
+    Screenshot_Send(&end, 1);
 }

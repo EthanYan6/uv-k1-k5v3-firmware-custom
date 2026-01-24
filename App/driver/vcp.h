@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include "usb_config.h"
 
 #define VCP_RX_BUF_SIZE 256
@@ -27,6 +28,7 @@ extern uint8_t VCP_RxBuf[VCP_RX_BUF_SIZE];
 extern volatile uint32_t VCP_RxBufPointer;
 
 void VCP_Init();
+bool VCP_ScreenshotPing(void);
 
 static inline void VCP_Send(const uint8_t *Buf, uint32_t Size)
 {

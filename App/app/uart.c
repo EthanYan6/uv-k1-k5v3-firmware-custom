@@ -677,13 +677,25 @@ bool UART_IsCommandAvailable(uint32_t Port)
         return false;
     }
 
-    while (1)
+    // Limit iterations to prevent long loops when buffer is full of non-command data
+    uint16_t maxIterations = ReadBufSize + 1;
+
+    while (maxIterations--)
     {
         if ((*pReadPointer) == DmaLength)
             return false;
 
-        while ((*pReadPointer) != DmaLength && ReadBuf[*pReadPointer] != 0xABU)
+        // Find 0xAB with iteration limit
+        uint16_t searchLimit = ReadBufSize;
+        while ((*pReadPointer) != DmaLength && ReadBuf[*pReadPointer] != 0xABU && searchLimit--)
             *pReadPointer = DMA_INDEX((*pReadPointer), 1, ReadBufSize);
+
+        if (searchLimit == 0)
+        {
+            // Too many bytes without finding 0xAB - sync to current position and exit
+            *pReadPointer = DmaLength;
+            return false;
+        }
 
         if ((*pReadPointer) == DmaLength)
             return false;
@@ -700,6 +712,13 @@ bool UART_IsCommandAvailable(uint32_t Port)
             break;
 
         *pReadPointer = DMA_INDEX(*pReadPointer, 1, ReadBufSize);
+    }
+
+    if (maxIterations == 0)
+    {
+        // Safety: too many outer loop iterations
+        *pReadPointer = DmaLength;
+        return false;
     }
 
     Index = DMA_INDEX(*pReadPointer, 2, ReadBufSize);
