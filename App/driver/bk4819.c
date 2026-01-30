@@ -19,6 +19,7 @@
 #include <stdio.h>
 
 #include "settings.h"
+#include "misc.h"
 
 #include "audio.h"
 
@@ -27,10 +28,6 @@
 #include "driver/system.h"
 #include "driver/systick.h"
 
-
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
 
 #define PIN_CSN GPIO_MAKE_PIN(GPIOF, LL_GPIO_PIN_9)
 #define PIN_SCL GPIO_MAKE_PIN(GPIOB, LL_GPIO_PIN_8)

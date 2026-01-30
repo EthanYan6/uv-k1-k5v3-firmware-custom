@@ -32,10 +32,6 @@
 #include "ui/inputbox.h"
 #include "ui/ui.h"
 
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
-
 uint16_t          gFM_Channels[FM_CHANNELS_MAX];
 bool              gFmRadioMode;
 uint8_t           gFmRadioCountdown_500ms;

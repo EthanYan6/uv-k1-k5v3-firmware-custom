@@ -23,9 +23,6 @@
 #include "ui/inputbox.h"
 #include "misc.h"
 
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0]))
-#endif
 
 void UI_GenerateChannelString(char *pString, const uint16_t Channel)
 {

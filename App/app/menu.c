@@ -42,9 +42,6 @@
 #include "ui/menu.h"
 #include "ui/ui.h"
 
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
 
 uint8_t gUnlockAllTxConfCnt;
 
