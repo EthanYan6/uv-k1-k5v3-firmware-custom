@@ -806,6 +806,10 @@ void APP_EndTransmission(void)
 
     gFlagEndTransmission = true;
 
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+    gTxTimerCountdown_500ms = 0;  /* 松开 PTT 重置发射计时为 0，下次按 PTT 再开始 */
+#endif
+
     if (gMonitor) {
          //turn the monitor back on
         gFlagReconfigureVfos = true;
