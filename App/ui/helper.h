@@ -27,6 +27,7 @@ void UI_PrintStringSmallNormal(const char *pString, uint8_t Start, uint8_t End, 
 #ifdef ENABLE_FEAT_F4HWN
 void UI_PrintStringSmallNormalVOffset(const char *pString, uint8_t Start, uint8_t End, uint8_t Line, uint8_t vOffset);
 void UI_PrintStringSmallNormalVOffsetUp(const char *pString, uint8_t Start, uint8_t End, uint8_t Line, uint8_t upOffset);
+void UI_PrintStringSmallNormalBottomInRow(const char *pString, uint8_t Start, uint8_t End, uint8_t Line);
 void UI_PrintStringSmallNormalAt(const char *pString, uint8_t x, uint8_t y);
 void UI_DisplayFrequencyVOffset(const char *string, uint8_t X, uint8_t Y, bool center, uint8_t vOffsetY);
 void UI_DisplayFrequencyUp2(const char *string, uint8_t X, uint8_t Y, bool center, uint8_t maxXTop);

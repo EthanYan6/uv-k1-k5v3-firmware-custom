@@ -481,21 +481,6 @@ void UI_MAIN_TimeSlice500ms(void)
         return;
 #endif
 
-#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
-        // 切换信道或 VFO 时重置计时
-        {
-            static uint16_t s_lastChannel = 0xFFFF;
-            static uint8_t s_lastVfo = 0xFF;
-            const uint8_t vfo = gEeprom.TX_VFO;
-            const uint16_t ch = gEeprom.ScreenChannel[vfo];
-            if (s_lastChannel != ch || s_lastVfo != vfo) {
-                s_lastChannel = ch;
-                s_lastVfo = vfo;
-                gRxTimerCountdown_500ms = 7200;  // RX 计时归零
-            }
-        }
-#endif
-
         if(FUNCTION_IsRx()) {
             DisplayRSSIBar(true);
 #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
@@ -646,10 +631,12 @@ void UI_DisplayMain(void)
         UI_DrawLineBuffer(gFrameBuffer, rectX0, rectY0, LCD_WIDTH - 1, rectY0, true);
         UI_DrawLineBuffer(gFrameBuffer, LCD_WIDTH - 1, rectY0, LCD_WIDTH - 1, rectY1, true);
 
-        // 第一行：仅右侧 dBm（信道号移到频率后右上角并反色）
+        // 右上角：信道模式默认显示信道号，接收时显示灵敏度；频率模式默认不显示，接收时显示灵敏度
         {
-            char dBmStr[12];
+            const int slotY = 4;
+            const int rightEdge = (int)(LCD_WIDTH - 1);
             if (FUNCTION_IsRx()) {
+                char dBmStr[12];
                 int16_t rssi_dBm =
                     BK4819_GetRSSI_dBm()
 #ifdef ENABLE_AM_FIX
@@ -660,23 +647,32 @@ void UI_DisplayMain(void)
                 if (rssi_dBm > 141) rssi_dBm = 141;
                 if (rssi_dBm < 53) rssi_dBm = 53;
                 sprintf(dBmStr, "%d dBm", rssi_dBm);
-            } else {
-                strcpy(dBmStr, "--- dBm");
+                const unsigned int w = strlen(dBmStr) * 4;
+                const int x0 = (rightEdge - (int)w) > (int)contentX ? (rightEdge - (int)w) : (int)contentX;
+                GUI_DisplaySmallest(dBmStr, (uint8_t)x0, slotY, false, true);
+                {
+                    uint8_t s_level, overS9Bars = 0;
+                    if (rssi_dBm >= 93) {
+                        s_level = (uint8_t)((141 - rssi_dBm) * 8u / 48u + 1u);
+                        if (s_level > 9) s_level = 9;
+                    } else {
+                        s_level = 9;
+                        uint8_t overS9dBm = (rssi_dBm >= 53) ? (uint8_t)(93 - rssi_dBm) : 40;
+                        if (overS9dBm > 40) overS9dBm = 40;
+                        overS9Bars = overS9dBm * 4u / 40u;
+                    }
+                    uint8_t raw = s_level + overS9Bars;
+                    gVFO_RSSI_bar_level[vfo] = (raw * 6u + 6u) / 13u;
+                    if (gVFO_RSSI_bar_level[vfo] > 6u) gVFO_RSSI_bar_level[vfo] = 6u;
+                }
+                gUpdateStatus = true;
+            } else if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo])) {
+                sprintf(String, "%04u", gEeprom.ScreenChannel[vfo] + 1);
+                const uint8_t chNumW = 4 * 4;
+                const int x0 = (rightEdge - (int)chNumW) > (int)contentX ? (rightEdge - (int)chNumW) : (int)contentX;
+                GUI_DisplaySmallest(String, (uint8_t)x0, slotY, false, true);
             }
-            const unsigned int len = strlen(dBmStr);
-            const unsigned int w = len * 4;  /* 最小字 3x5 约 4 像素/字 */
-            const int start = (int)(LCD_WIDTH - 1) - (int)w;
-            const int x0 = (start < (int)contentX) ? (int)contentX : start;
-            GUI_DisplaySmallest(dBmStr, (uint8_t)x0, 4, false, true);
-        }
-
-        // 信道号：频率右上角（不超频率、不盖 dBm），最小字反色
-        if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo])) {
-            sprintf(String, "%04u", gEeprom.ScreenChannel[vfo] + 1);
-            const uint8_t chNumW = 4 * 4;   /* 最小字 4 像素/字 */
-            const uint8_t chNumX = (uint8_t)(LCD_WIDTH - 1 - chNumW - 28);
-            const uint8_t chNumY = 16;      /* 下移 1px：15->16 */
-            GUI_DisplaySmallestNegative(String, chNumX, chNumY);
+            /* 频率模式且未接收：右上角不显示 */
         }
 
         // 信道名与频率整体上移 3 像素：按行上移一行(约 8px)，整字不拆
@@ -689,7 +685,7 @@ void UI_DisplayMain(void)
         }
 
         {
-            uint32_t f = FUNCTION_IsRx() ? pVfo->pRX->Frequency : pVfo->pTX->Frequency;
+            uint32_t f = (gCurrentFunction == FUNCTION_TRANSMIT) ? pVfo->pTX->Frequency : pVfo->pRX->Frequency;
             sprintf(String, "%3u.%05u", f / 100000, f % 100000);
             char lastTwo[3];
             lastTwo[0] = String[7];
@@ -698,7 +694,10 @@ void UI_DisplayMain(void)
             String[7] = '\0';
             const int freqMainPixels = 6 * 8;
             UI_PrintString(String, contentX, contentX, 2, 8);
-            UI_PrintStringSmallNormal(lastTwo, contentX + freqMainPixels + 8, contentX + freqMainPixels + 8, 2);
+            /* 后两位与主频率同一行：用最小字体 3x5 画在主频率右侧，后画以免被挡 */
+            const int lastTwoX = contentX + freqMainPixels + 8;
+            const int lastTwoY = 23;  /* 向下 2 像素 */
+            GUI_DisplaySmallest(lastTwo, (uint8_t)lastTwoX, lastTwoY, false, true);
         }
 
         // 方框底边：与上边/右边同样用 1 像素线画
@@ -710,9 +709,9 @@ void UI_DisplayMain(void)
 #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
         {
             uint16_t t = (FUNCTION_IsRx()) ? (3600 - gRxTimerCountdown_500ms / 2) : (gTxTimerCountdown_500ms / 2);
-            uint8_t m = t / 60;
-            uint8_t s = t - (m * 60);
-            sprintf(String, "time: %02u:%02u", m, s);
+            uint16_t m = t / 60;
+            uint8_t s = (uint8_t)(t % 60);
+            sprintf(String, "time: %02u:%02u", (unsigned)m, s);
             const int w1 = (int)strlen(String) * smallCharW;
             const int x1 = 127 - w1;
             GUI_DisplaySmallest(String, (uint8_t)(x1 > 0 ? x1 : 0), line1Y + 2, false, true);

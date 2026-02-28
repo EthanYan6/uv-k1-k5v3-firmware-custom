@@ -58,10 +58,8 @@ void SysTick_Handler(void)
         DECREMENT_AND_TRIGGER(gVfoSaveCountdown_10ms, gScheduleVfoSave);
         DECREMENT_AND_TRIGGER(gTxTimerCountdownAlert_500ms - ALERT_TOT * 2, gTxTimeoutReachedAlert);
         #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
-            // 有信号：递减（正计时）；无信号：停止并清零（显示 00:00）
-            if (g_SquelchLost)
-                gRxTimerCountdown_500ms = 7200;
-            else
+            /* 接收时正计时，与系统原逻辑一致 */
+            if (FUNCTION_IsRx())
                 DECREMENT(gRxTimerCountdown_500ms);
         #endif
 #endif

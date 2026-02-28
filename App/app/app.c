@@ -776,16 +776,10 @@ static void CheckRadioInterrupts(void)
         if (interrupts.sqlLost) {
             g_SquelchLost = true;
             BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, true);
-            #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
-                gRxTimerCountdown_500ms = 7200;
-            #endif
         }
 
         if (interrupts.sqlFound) {
             g_SquelchLost = false;
-#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
-            gRxTimerCountdown_500ms = 7200;  // 有信号时从 0 重新计时
-#endif
             BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
         }
 

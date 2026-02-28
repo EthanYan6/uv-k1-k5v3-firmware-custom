@@ -199,7 +199,7 @@ volatile bool     gTxTimeoutReached;
     volatile bool     gTxTimeoutReachedAlert;
     volatile uint16_t gTxTimeoutToneAlert = 800;
     #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
-        volatile uint16_t gRxTimerCountdown_500ms;
+        volatile uint16_t gRxTimerCountdown_500ms = 7200;  /* 0 秒显示，进入 RX 时再置 7200 */
     #endif
     #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
         volatile uint8_t  gUART_LockScreenshot = 0; // lock screenshot if Chirp is used

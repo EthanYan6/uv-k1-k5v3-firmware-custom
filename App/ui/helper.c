@@ -131,6 +131,28 @@ void UI_PrintStringSmallNormal(const char *pString, uint8_t Start, uint8_t End, 
 }
 
 #ifdef ENABLE_FEAT_F4HWN
+/* 小号正文字体画在单行内且底对齐：字体落在该行下 7 像素，与 8 像素高大字底边对齐，不跨行 */
+void UI_PrintStringSmallNormalBottomInRow(const char *pString, uint8_t Start, uint8_t End, uint8_t Line)
+{
+    if (Line >= 8) return;
+    const size_t Length = strlen(pString);
+    const uint8_t char_width = ARRAY_SIZE(gFontSmall[0]);
+    const unsigned int char_spacing = char_width + 1;
+    uint8_t x_start = Start;
+    if (End > Start && Length > 0)
+        x_start += (((End - Start) - (unsigned int)Length * char_spacing) + 1) / 2;
+    uint8_t *buffer = gFrameBuffer[Line];
+    for (size_t i = 0; i < Length; i++) {
+        if (pString[i] <= ' ' || pString[i] >= 127) continue;
+        const unsigned int index = (unsigned int)(pString[i] - ' ' - 1);
+        const uint32_t col_offset = i * char_spacing + 1;
+        for (uint8_t c = 0; c < char_width && (x_start + col_offset + c) < 128; c++) {
+            uint8_t V = gFontSmall[index][c];
+            buffer[x_start + col_offset + c] |= (uint8_t)(V >> 1);  /* 下 7 像素，底对齐 */
+        }
+    }
+}
+
 /* 小号正文在像素 (x,y) 处整体绘制，y 需为 8 的倍数；整段文字一起移动，不拆行 */
 void UI_PrintStringSmallNormalAt(const char *pString, uint8_t x, uint8_t y)
 {

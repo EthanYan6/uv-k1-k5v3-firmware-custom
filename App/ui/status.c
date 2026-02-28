@@ -37,17 +37,16 @@
 
 #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
 #ifndef ENABLE_FEAT_F4HWN_DEBUG
-static void convertTime(uint8_t *line, uint8_t type) 
+static void convertTime(uint8_t *line, uint8_t type)
 {
     uint16_t t = (type == 0) ? (gTxTimerCountdown_500ms / 2) : (3600 - gRxTimerCountdown_500ms / 2);
+    uint16_t m = t / 60;
+    uint8_t s = (uint8_t)(t % 60);
 
-    uint8_t m = t / 60;
-    uint8_t s = t - (m * 60); // Replace modulo with subtraction for efficiency
+    gStatusLine[0] = gStatusLine[7] = gStatusLine[14] = 0x00;
 
-    gStatusLine[0] = gStatusLine[7] = gStatusLine[14] = 0x00; // Quick fix on display (on scanning I, II, etc.)
-
-    char str[6];
-    sprintf(str, "%02u:%02u", m, s);
+    char str[10];
+    sprintf(str, "%02u:%02u", (unsigned)m, s);
     UI_PrintStringSmallBufferNormal(str, line);
 
     gUpdateStatus = true;
@@ -75,7 +74,8 @@ void UI_DisplayStatus()
         memcpy(line + x, BITMAP_Antenna, sizeof(BITMAP_Antenna));
         x += 6;
 
-        // 2. 5格信号条：仅接收时显示 RSSI，发射时显示 0
+        // 2. 5格信号条：向左 2 像素、向上 1 像素，条间 1 像素间隔
+        x -= 2;  // 整体左移 2 像素
         uint8_t bars = 0;
         if (FUNCTION_IsRx()) {
             bars = (gVFO_RSSI_bar_level[vfo] * 5 + 5) / 6;
@@ -83,14 +83,11 @@ void UI_DisplayStatus()
         }
         for (uint8_t i = 0; i < 5; i++) {
             uint8_t h = i + 1;  // 高度 1,2,3,4,5
-            uint8_t mask = ((1u << h) - 1u) << (8 - h);
-            if (i < bars) {
-                line[x] |= mask;
-                line[x + 1] |= mask;
-            }
-            x += 2;
+            uint8_t mask = ((1u << h) - 1u) << (7 - h);  // 上移 1 像素：留顶 1 像素空
+            if (i < bars)
+                line[x + (unsigned int)i * 2u] |= mask;  // 每条 1 列，间隔 1 列
         }
-        x += 1;
+        x += 10;  // 5 条 × 2（条+间隔）
 
         // 3. |->| 直频图标 (仅当 RX 频率 == TX 频率时显示)
         if (pVfo->freq_config_RX.Frequency == pVfo->freq_config_TX.Frequency) {
