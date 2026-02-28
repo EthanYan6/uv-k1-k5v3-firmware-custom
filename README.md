@@ -6,10 +6,9 @@
 
 ### 主界面示意
 
-![2fb58fa8f1b8b5cdc7ee2cb509e1a471](https://github.com/user-attachments/assets/11312942-a8bf-45d2-85cf-ca22ca00b13e)
-
-
 ## 主页面 (MAIN ONLY) 元素说明
+![2a6cb0206000126806cab17161009f0f](https://github.com/user-attachments/assets/9c1f781c-d15b-4fc6-8be2-722d9cdfa7bc)![303d2991af1d6e26238b19ff5aac62aa](https://github.com/user-attachments/assets/2f870472-619b-40e0-b24d-5c8a17980c62)
+
 
 ### 如何进入主页面
 
