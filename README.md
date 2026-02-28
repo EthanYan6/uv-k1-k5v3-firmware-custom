@@ -6,7 +6,8 @@
 
 ### 主界面示意
 
-![主界面截图](docs/main-screen.png)
+![2fb58fa8f1b8b5cdc7ee2cb509e1a471](https://github.com/user-attachments/assets/11312942-a8bf-45d2-85cf-ca22ca00b13e)
+
 
 ## 主页面 (MAIN ONLY) 元素说明
 
