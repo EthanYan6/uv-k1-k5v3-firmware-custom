@@ -58,11 +58,17 @@ void SysTick_Handler(void)
         DECREMENT_AND_TRIGGER(gVfoSaveCountdown_10ms, gScheduleVfoSave);
         DECREMENT_AND_TRIGGER(gTxTimerCountdownAlert_500ms - ALERT_TOT * 2, gTxTimeoutReachedAlert);
         #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
-            DECREMENT(gRxTimerCountdown_500ms);
+            // 有信号：递减（正计时）；无信号：停止并清零（显示 00:00）
+            if (g_SquelchLost)
+                gRxTimerCountdown_500ms = 7200;
+            else
+                DECREMENT(gRxTimerCountdown_500ms);
         #endif
 #endif
         
-        DECREMENT_AND_TRIGGER(gTxTimerCountdown_500ms, gTxTimeoutReached);
+        // 仅在发射时递减，松开 PTT 后发射计时停止
+        if (gCurrentFunction == FUNCTION_TRANSMIT)
+            DECREMENT_AND_TRIGGER(gTxTimerCountdown_500ms, gTxTimeoutReached);
         DECREMENT(gSerialConfigCountDown_500ms);
     }
 

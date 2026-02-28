@@ -400,6 +400,13 @@ void DisplayRSSIBar(const bool now)
     DrawLevelBar(bar_x, line, s_level + overS9Bars, 13);
     if (now)
         ST7565_BlitLine(line);
+    // 供顶部状态栏 5 格信号条使用：将 0~13 映射到 0~6
+    {
+        const uint8_t raw = s_level + overS9Bars;
+        gVFO_RSSI_bar_level[gEeprom.RX_VFO] = (raw * 6u + 6u) / 13u;
+        if (gVFO_RSSI_bar_level[gEeprom.RX_VFO] > 6u)
+            gVFO_RSSI_bar_level[gEeprom.RX_VFO] = 6u;
+    }
 #else
     int16_t rssi = BK4819_GetRSSI();
     uint8_t Level;
@@ -422,6 +429,7 @@ void DisplayRSSIBar(const bool now)
     DrawSmallAntennaAndBars(pLine, Level);
     if (now)
         ST7565_BlitFullScreen();
+    gVFO_RSSI_bar_level[gEeprom.RX_VFO] = Level;
 #endif
 
 }
@@ -473,11 +481,35 @@ void UI_MAIN_TimeSlice500ms(void)
         return;
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+        // 切换信道或 VFO 时重置计时
+        {
+            static uint16_t s_lastChannel = 0xFFFF;
+            static uint8_t s_lastVfo = 0xFF;
+            const uint8_t vfo = gEeprom.TX_VFO;
+            const uint16_t ch = gEeprom.ScreenChannel[vfo];
+            if (s_lastChannel != ch || s_lastVfo != vfo) {
+                s_lastChannel = ch;
+                s_lastVfo = vfo;
+                gRxTimerCountdown_500ms = 7200;  // RX 计时归零
+            }
+        }
+#endif
+
         if(FUNCTION_IsRx()) {
             DisplayRSSIBar(true);
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+            // 接收时每 500ms 触发主屏刷新，使 RX 正计时实时更新
+            gUpdateDisplay = true;
+#endif
         }
+        else {
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+            // 发射时每 500ms 触发主屏刷新，使 TX 倒计时实时更新
+            gUpdateDisplay = true;
+#endif
 #ifdef ENABLE_FEAT_F4HWN // Blink Green Led for white...
-        else if(gSetting_set_eot > 0 && RxBlinkLed == 2)
+            if(gSetting_set_eot > 0 && RxBlinkLed == 2)
         {
             if(RxBlinkLedCounter <= 8)
             {
@@ -525,6 +557,7 @@ void UI_MAIN_TimeSlice500ms(void)
             }
         }
 #endif
+        }
     }
 }
 
@@ -579,6 +612,166 @@ void UI_DisplayMain(void)
             gFrameBuffer[shift][i] ^= 0xFF;
         }
         */
+    }
+#endif
+
+    // 主页面 (MAIN ONLY) 定制布局：横线、计时、大矩形+左侧条、信道/频率、底部两按钮
+#ifdef ENABLE_FEAT_F4HWN
+    if (isMainOnly() && !gAirCopyBootMode && gScreenToDisplay == DISPLAY_MAIN &&
+        !(gEeprom.KEY_LOCK && gKeypadLocked > 0)) {
+        const uint8_t vfo = gEeprom.TX_VFO;
+        const VFO_Info_t *pVfo = &gEeprom.VfoInfo[vfo];
+
+        // 顶线 + 左侧小长条（RX 接收时空心，平时实心）+ 方框
+        for (unsigned int i = 0; i < LCD_WIDTH; i++)
+            gFrameBuffer[0][i] |= 0x01;
+
+        const bool hollowBar = FUNCTION_IsRx();
+        const int barX0 = 0, barX1 = 7, rectX0 = 7, rectY0 = 2, rectY1 = 33;
+        const int contentX = rectX0 + 4;
+
+        for (int y = rectY0; y <= rectY1; y++) {
+            for (int x = barX0; x < barX1; x++) {
+                if (!hollowBar) {
+                    UI_DrawPixelBuffer(gFrameBuffer, x, y, true);   // 非 RX：实心
+                } else {
+                    const bool border =
+                        (x == barX0) || (x == barX1 - 1) || (y == rectY0) || (y == rectY1);
+                    if (border)
+                        UI_DrawPixelBuffer(gFrameBuffer, x, y, true);   // RX：空心边框
+                }
+            }
+        }
+
+        UI_DrawLineBuffer(gFrameBuffer, rectX0, rectY0, LCD_WIDTH - 1, rectY0, true);
+        UI_DrawLineBuffer(gFrameBuffer, LCD_WIDTH - 1, rectY0, LCD_WIDTH - 1, rectY1, true);
+
+        // 第一行：仅右侧 dBm（信道号移到频率后右上角并反色）
+        {
+            char dBmStr[12];
+            if (FUNCTION_IsRx()) {
+                int16_t rssi_dBm =
+                    BK4819_GetRSSI_dBm()
+#ifdef ENABLE_AM_FIX
+                    + ((gSetting_AM_fix && gRxVfo->Modulation == MODULATION_AM) ? AM_fix_get_gain_diff() : 0)
+#endif
+                    + dBmCorrTable[gRxVfo->Band];
+                rssi_dBm = -rssi_dBm;
+                if (rssi_dBm > 141) rssi_dBm = 141;
+                if (rssi_dBm < 53) rssi_dBm = 53;
+                sprintf(dBmStr, "%d dBm", rssi_dBm);
+            } else {
+                strcpy(dBmStr, "--- dBm");
+            }
+            const unsigned int len = strlen(dBmStr);
+            const unsigned int w = len * 4;  /* 最小字 3x5 约 4 像素/字 */
+            const int start = (int)(LCD_WIDTH - 1) - (int)w;
+            const int x0 = (start < (int)contentX) ? (int)contentX : start;
+            GUI_DisplaySmallest(dBmStr, (uint8_t)x0, 4, false, true);
+        }
+
+        // 信道号：频率右上角（不超频率、不盖 dBm），最小字反色
+        if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo])) {
+            sprintf(String, "%04u", gEeprom.ScreenChannel[vfo] + 1);
+            const uint8_t chNumW = 4 * 4;   /* 最小字 4 像素/字 */
+            const uint8_t chNumX = (uint8_t)(LCD_WIDTH - 1 - chNumW - 28);
+            const uint8_t chNumY = 16;      /* 下移 1px：15->16 */
+            GUI_DisplaySmallestNegative(String, chNumX, chNumY);
+        }
+
+        // 信道名与频率整体上移 3 像素：按行上移一行(约 8px)，整字不拆
+        if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo])) {
+            char chName[16];
+            SETTINGS_FetchChannelName(chName, gEeprom.ScreenChannel[vfo]);
+            if (chName[0]) UI_PrintStringSmallNormal(chName, contentX, contentX, 1);
+        } else {
+            UI_PrintStringSmallNormal("VFO", contentX, contentX, 1);
+        }
+
+        {
+            uint32_t f = FUNCTION_IsRx() ? pVfo->pRX->Frequency : pVfo->pTX->Frequency;
+            sprintf(String, "%3u.%05u", f / 100000, f % 100000);
+            char lastTwo[3];
+            lastTwo[0] = String[7];
+            lastTwo[1] = String[8];
+            lastTwo[2] = '\0';
+            String[7] = '\0';
+            const int freqMainPixels = 6 * 8;
+            UI_PrintString(String, contentX, contentX, 2, 8);
+            UI_PrintStringSmallNormal(lastTwo, contentX + freqMainPixels + 8, contentX + freqMainPixels + 8, 2);
+        }
+
+        // 方框底边：与上边/右边同样用 1 像素线画
+        UI_DrawLineBuffer(gFrameBuffer, rectX0, rectY1, LCD_WIDTH - 1, rectY1, true);
+
+        // 方框下两行：第一行 time: 计时，第二行 亚音，均右对齐；整体上移 1px
+        const int line1Y = 33, line2Y = 39;
+        const int smallCharW = 4;  /* 最小字约 4 像素/字 */
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+        {
+            uint16_t t = (FUNCTION_IsRx()) ? (3600 - gRxTimerCountdown_500ms / 2) : (gTxTimerCountdown_500ms / 2);
+            uint8_t m = t / 60;
+            uint8_t s = t - (m * 60);
+            sprintf(String, "time: %02u:%02u", m, s);
+            const int w1 = (int)strlen(String) * smallCharW;
+            const int x1 = 127 - w1;
+            GUI_DisplaySmallest(String, (uint8_t)(x1 > 0 ? x1 : 0), line1Y + 2, false, true);
+        }
+#endif
+        {
+            char toneBuf[48];
+            uint8_t pos = 0;
+            const FREQ_Config_t *pRx = &pVfo->freq_config_RX;
+            const FREQ_Config_t *pTx = &pVfo->freq_config_TX;
+            if (pRx->CodeType != CODE_TYPE_OFF) {
+                pos += sprintf(toneBuf + pos, "R");
+                if (pRx->CodeType == CODE_TYPE_CONTINUOUS_TONE) {
+                    pos += sprintf(toneBuf + pos, "CT%u.%u", CTCSS_Options[pRx->Code] / 10, CTCSS_Options[pRx->Code] % 10);
+                } else if (pRx->CodeType == CODE_TYPE_DIGITAL) {
+                    pos += sprintf(toneBuf + pos, "DCS%03oN", DCS_Options[pRx->Code]);
+                } else {
+                    pos += sprintf(toneBuf + pos, "DCS%03oI", DCS_Options[pRx->Code]);
+                }
+                if (pTx->CodeType != CODE_TYPE_OFF)
+                    toneBuf[pos++] = ' ';
+            }
+            if (pTx->CodeType != CODE_TYPE_OFF) {
+                pos += sprintf(toneBuf + pos, "T");
+                if (pTx->CodeType == CODE_TYPE_CONTINUOUS_TONE) {
+                    pos += sprintf(toneBuf + pos, "CT%u.%u", CTCSS_Options[pTx->Code] / 10, CTCSS_Options[pTx->Code] % 10);
+                } else if (pTx->CodeType == CODE_TYPE_DIGITAL) {
+                    pos += sprintf(toneBuf + pos, "DCS%03oN", DCS_Options[pTx->Code]);
+                } else {
+                    pos += sprintf(toneBuf + pos, "DCS%03oI", DCS_Options[pTx->Code]);
+                }
+            }
+            toneBuf[pos] = '\0';
+            if (pos > 0) {
+                const int w2 = (int)strlen(toneBuf) * smallCharW;
+                const int x2 = 127 - w2;
+                GUI_DisplaySmallest(toneBuf, (uint8_t)(x2 > 0 ? x2 : 0), line2Y + 2, false, true);
+            }
+        }
+
+        // 底部两按钮：黑底先增高 1 像素（row5 底一行黑），再 row6 黑底，中间白线，笔画用 Negative 清空（字不动）
+        const int btnLY = 6, btnL5 = 5, btnLX0 = 0, btnLX1 = 62, btnRX0 = 64, btnRX1 = 127;
+        const int sepX = 63;
+        for (int x = btnLX0; x <= btnLX1; x++)
+            gFrameBuffer[btnL5][x] |= 0x80;
+        for (int x = btnRX0; x <= btnRX1; x++)
+            gFrameBuffer[btnL5][x] |= 0x80;
+        gFrameBuffer[btnL5][sepX] &= (uint8_t)~0x80;
+        for (int x = btnLX0; x <= btnLX1; x++)
+            gFrameBuffer[btnLY][x] = 0xFF;
+        for (int x = btnRX0; x <= btnRX1; x++)
+            gFrameBuffer[btnLY][x] = 0xFF;
+        gFrameBuffer[btnLY][sepX] = 0x00;
+
+        UI_PrintStringSmallNormalNegative("Menu", btnLX0, btnLX1, btnLY);
+        UI_PrintStringSmallNormalNegative(gModulationStr[pVfo->Modulation], btnRX0, btnRX1, btnLY);
+
+        ST7565_BlitFullScreen();
+        return;
     }
 #endif
 

@@ -148,6 +148,17 @@ void FUNCTION_PowerSave() {
 
 void FUNCTION_Transmit()
 {
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+    // 每次进入发射（含重新按 PTT）都重新开始 TOT 倒计时
+    gTxTimerCountdown_500ms = 0;
+    #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
+    if (gAlarmState == ALARM_STATE_OFF)
+    #endif
+    {
+        gTxTimerCountdown_500ms = ((gEeprom.TX_TIMEOUT_TIMER + 1) * 5) * 2;
+    }
+#endif
+
     // if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
     BK4819_DisableDTMF();
 
