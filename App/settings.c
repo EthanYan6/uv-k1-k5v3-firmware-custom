@@ -102,15 +102,15 @@ void SETTINGS_InitEEPROM(void)
             int8_t buf[7];
             PY25Q16_ReadBuffer(0x00A0B9, (uint8_t *)buf, 7);
 
-            bool allFF = true;
+            needsWrite = true;
             for (uint8_t i = 0; i < 7; i++) {
                 if ((uint8_t)buf[i] != 0xFF) {
-                    allFF = false;
+                    needsWrite = false;
                     break;
                 }
             }
 
-            if (allFF) {
+            if (needsWrite) {
                 for (uint8_t i = 0; i < 7; i++)
                     buf[i] = dBmCorrTable[i];
                 PY25Q16_WriteBuffer(0x00A0B9, buf, 7, false);
