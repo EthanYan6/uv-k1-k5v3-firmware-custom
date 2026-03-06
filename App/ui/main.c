@@ -271,7 +271,7 @@ void DisplayRSSIBar(const bool now)
     //sprintf(String, "%d", RxBlink);
     //UI_PrintStringSmallBold(String, 80, 0, RxLine);
 
-    if(RxLine >= 0 && center_line != CENTER_LINE_IN_USE)
+    if(RxLine >= 0 && center_line != CENTER_LINE_IN_USE && !isMainOnly())
     {
         static bool clean = false;
         uint8_t *p_line0 = gFrameBuffer[RxLine + 0];

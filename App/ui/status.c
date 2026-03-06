@@ -89,47 +89,52 @@ void UI_DisplayStatus()
         }
         x += 10;  // 5 条 × 2（条+间隔）
 
-        // 3. |->| 直频图标 (仅当 RX 频率 == TX 频率时显示)
+        // 3. |->| 直频图标 (仅当 RX 频率 == TX 频率时显示)，4 字约 16 像素
         if (pVfo->freq_config_RX.Frequency == pVfo->freq_config_TX.Frequency) {
             GUI_DisplaySmallest("|->|", x, 1, true, true);
-            x += 22;
+            x += 17;
         }
+        x += 1;  // 与下一项间隔 1 像素
 
-        // 4. 功率 (L1/L2/.../M/H)
+        // 4. 功率 (L1/L2/.../M/H)，2 字宽约 8 像素，保留 9 与其它项一致
         {
             const char *pwr[] = {"L1","L2","L3","L4","L5","M","H"};
             uint8_t idx = pVfo->OUTPUT_POWER;
             if (idx == OUTPUT_POWER_USER)
                 idx = gSetting_set_pwr + 1;  // 1..7
             if (idx >= 1 && idx <= 7) {
-                GUI_DisplaySmallest(pwr[idx - 1], x, 1, true, true);
-                x += 14;
+                GUI_DisplaySmallest(pwr[idx - 1], x, 2, true, true);
+                x += 9;
             }
         }
+        x += 1;
 
         // 5. 宽带/窄带 + 带宽
         {
             const char *bw = (pVfo->CHANNEL_BANDWIDTH == BANDWIDTH_WIDE) ? "W" : "N";
-            GUI_DisplaySmallest(bw, x, 1, true, true);
+            GUI_DisplaySmallest(bw, x, 2, true, true);
             x += 6;
+            x += 1;
             sprintf(str, "%s", (pVfo->CHANNEL_BANDWIDTH == BANDWIDTH_WIDE) ? "25K" : "12K");
-            GUI_DisplaySmallest(str, x, 1, true, true);
+            GUI_DisplaySmallest(str, x, 2, true, true);
             x += 14;
         }
+        x += 1;
 
         // 6. 静噪值 (0-9)
         {
             uint8_t sq = (pVfo->SquelchOpenRSSIThresh * 9u + 255u) / 256u;
             if (sq > 9) sq = 9;
             sprintf(str, "%u", sq);
-            GUI_DisplaySmallest(str, x, 1, true, true);
+            GUI_DisplaySmallest(str, x, 2, true, true);
             x += 6;
         }
+        x += 1;
 
         // 7. 步进
         {
             sprintf(str, "%d.%02uK", pVfo->StepFrequency / 100, pVfo->StepFrequency % 100);
-            GUI_DisplaySmallest(str, x, 1, true, true);
+            GUI_DisplaySmallest(str, x, 2, true, true);
             x += 22;
         }
 

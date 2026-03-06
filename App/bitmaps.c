@@ -149,6 +149,17 @@ const uint8_t BITMAP_USB_C[9] =
     0b00011100
 };
 
+// 天线图标 6×8：倒三角(两行宽顶+收尖)+竖线，下移1像素，底与横线隔1像素。bit0=顶
+const uint8_t BITMAP_Antenna[6] =
+{
+    0x00,
+    0x06,   // 三角左缘：第2、3行 (bit1,bit2)
+    0x7E,   // 竖线贯穿 (bit1~bit6)
+    0x06,   // 三角右缘：第2、3行 (bit1,bit2)
+    0x00,
+    0x00
+};
+
 #ifdef ENABLE_VOX
     const uint8_t gFontVox[2][6] =
     {
