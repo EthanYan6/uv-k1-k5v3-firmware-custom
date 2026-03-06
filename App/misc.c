@@ -87,7 +87,7 @@ const uint16_t    NOAA_countdown_3_10ms            =   200 / 10;   // 200ms
 
 const uint32_t    gDefaultAesKey[4]                = {0x4AA5CC60, 0x0312CC5F, 0xFFD2DABB, 0x6BBA7F92};
 
-const uint8_t     gMicGain_dB2[5]                  = {3, 8, 16, 24, 31};
+const uint8_t     gMicGain_dB2[9]                  = {3, 8, 16, 24, 32, 40, 48, 56, 63}; // BK4819 {3, 8, 16, 24, 31};
 
 #ifndef ENABLE_FEAT_F4HWN
     bool              gSetting_350TX;
@@ -135,7 +135,7 @@ enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
     bool          gSetting_set_tmr = 0;
     bool          gSetting_set_ptt_session;
     #ifdef ENABLE_FEAT_F4HWN_DEBUG
-        uint16_t       gDebug;
+        int16_t   gDebug;
     #endif
     uint8_t       gDW = 0;
     uint8_t       gCB = 0;
@@ -149,6 +149,7 @@ enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
         bool          gPowerHigh = false;
         bool          gRemoveOffset = false;
     #endif
+    int8_t dBmCorrTable[7] = {-15, -16, -10, -4, -7, -6, -1};
 #endif
 
 #ifdef ENABLE_AUDIO_BAR
@@ -292,7 +293,7 @@ uint8_t           gFSKWriteIndex;
 
 #ifdef ENABLE_NOAA
     bool          gIsNoaaMode;
-    uint16_t      gNoaaChannel;
+    uint8_t      gNoaaChannel;
 #endif
 
 bool              gUpdateDisplay;
@@ -334,6 +335,7 @@ uint8_t           gIsLocked = 0xFF;
     uint16_t gVfoSaveCountdown_10ms = 0;
     bool gScheduleVfoSave = false;
     bool gVfoStateChanged = false;
+    char    gListName[MR_CHANNELS_LIST][4];
 #endif
 
 inline void FUNCTION_NOP() { ; }

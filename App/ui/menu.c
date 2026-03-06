@@ -646,7 +646,11 @@ void UI_DisplayMenu(void)
         case MENU_MIC:
             {   // display the mic gain in actual dB rather than just an index number
                 const uint8_t mic = gMicGain_dB2[gSubMenuSelection];
-                sprintf(String, "+%u.%01udB", mic / 2, mic % 2);
+                sprintf(String, "+%u.%udB", mic / 2, (mic % 2) * 5);
+
+                gaugeLine = 4;
+                gaugeMin = 0;
+                gaugeMax = 8;
             }
             break;
 
@@ -703,15 +707,14 @@ void UI_DisplayMenu(void)
             if (!gIsInSubMenu || gInputBoxIndex == 0)
             {
                 sprintf(String, "%3d.%05u", gSubMenuSelection / 100000, abs(gSubMenuSelection) % 100000);
-                UI_PrintString(String, menu_item_x1, menu_item_x2, 1, 8);
             }
             else
             {
                 const char * ascii = INPUTBOX_GetAscii();
                 sprintf(String, "%.3s.%.3s  ",ascii, ascii + 3);
-                UI_PrintString(String, menu_item_x1, menu_item_x2, 1, 8);
             }
 
+            UI_PrintString(String, menu_item_x1, menu_item_x2, 1, 8);
             UI_PrintString("MHz",  menu_item_x1, menu_item_x2, 3, 8);
 
             already_printed = true;
@@ -969,15 +972,28 @@ void UI_DisplayMenu(void)
                 strcpy(String, "ALL");
             else if (gSubMenuSelection == 0)
                 strcpy(String, "OFF");
-            else
-                sprintf(String, "%u", gSubMenuSelection);
+            else {
+                const char *name = gListName[gSubMenuSelection - 1];
+                
+                // If first character is empty/invalid, display "N/A"
+                if (name[0] == '\0' || name[0] == '\xff' || name[0] == ' ')
+                    sprintf(String, "%02u", gSubMenuSelection);
+                else
+                    sprintf(String, "%02u (%.3s)", gSubMenuSelection, name);
+            }
             break;
 
         case MENU_S_LIST:
             if (gSubMenuSelection == MR_CHANNELS_LIST + 1)
                 strcpy(String, "ALL");
-            else
-                sprintf(String, "%u", gSubMenuSelection);
+            else {
+                const char *name = gListName[gSubMenuSelection - 1];
+                // If first character is empty/invalid, display "N/A"
+                if (name[0] == '\0' || name[0] == '\xff' || name[0] == ' ')
+                    sprintf(String, "%02u", gSubMenuSelection);
+                else
+                    sprintf(String, "%02u (%.3s)", gSubMenuSelection, name);
+            }
             break;
 
         #ifdef ENABLE_ALARM

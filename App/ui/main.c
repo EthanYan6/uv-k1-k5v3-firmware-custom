@@ -46,7 +46,7 @@
 center_line_t center_line = CENTER_LINE_NONE;
 
 #ifdef ENABLE_FEAT_F4HWN
-    static int8_t RxBlink;
+    // static int8_t RxBlink;
     static int8_t RxBlinkLed = 0;
     static int8_t RxBlinkLedCounter;
     static int8_t RxLine;
@@ -60,16 +60,6 @@ center_line_t center_line = CENTER_LINE_NONE;
     }
 #endif
 
-const int8_t dBmCorrTable[7] = {
-            -15, // band 1
-            -25, // band 2
-            -20, // band 3
-            -4, // band 4
-            -7, // band 5
-            -6, // band 6
-             -1  // band 7
-        };
-
 const char *VfoStateStr[] = {
        [VFO_STATE_NORMAL]="",
        [VFO_STATE_BUSY]="BUSY",
@@ -80,18 +70,26 @@ const char *VfoStateStr[] = {
        [VFO_STATE_VOLTAGE_HIGH]="VOLT HIGH"
 };
 
-// ***************************************************************************
+// ----------------------------------------
 
-static void DrawSmallAntennaAndBars(uint8_t *p, unsigned int level)
+static void DrawSmallPowerBars(uint8_t *p, unsigned int level)
 {
     if(level>6)
         level = 6;
 
-    memcpy(p, BITMAP_Antenna, ARRAY_SIZE(BITMAP_Antenna));
-
-    for(uint8_t i = 1; i <= level; i++) {
-        char bar = (0xff << (6-i)) & 0x7F;
-        memset(p + 2 + i*3, bar, 2);
+    if(gSetting_set_gui)
+    {
+        for(uint8_t i = 0; i <= level; i++) {
+            char bar = (0xff << (6-i)) & 0x7F;
+            memset(p + 2 + i*3, bar, 2);
+        }
+    }
+    else
+    {
+        for(uint8_t i = 0; i <= level; i++) {
+            char bar = 0b00111110;
+            memset(p + 2 + i*3, bar, 2);
+        }
     }
 }
 #if defined ENABLE_AUDIO_BAR || defined ENABLE_RSSI_BAR
@@ -273,24 +271,23 @@ void DisplayRSSIBar(const bool now)
     //sprintf(String, "%d", RxBlink);
     //UI_PrintStringSmallBold(String, 80, 0, RxLine);
 
-    /*
     if(RxLine >= 0 && center_line != CENTER_LINE_IN_USE)
     {
-        if (RxBlink == 0 || RxBlink == 1) {
-            UI_PrintStringSmallBold("RX", 8, 0, RxLine);
-            //GUI_DisplaySmallest("RX", 10, (RxLine * 8) + 1, false, true);
+        static bool clean = false;
+        uint8_t *p_line0 = gFrameBuffer[RxLine + 0];
 
-            if (RxBlink == 1) RxBlink = 2;
+        clean = !clean;
+
+        if(clean) {
+            for(uint8_t i = 0; i < sizeof(BITMAP_VFO_Default); i++)
+                p_line0[i] = (p_line0[i] & 0x80) | BITMAP_VFO_Default[i];
         } else {
-            for (uint8_t i = 8; i < 24; i++)
-            {
-                gFrameBuffer[RxLine][i] = 0x00;
-            }
-            RxBlink = 1;
+            for(uint8_t i = 0; i < sizeof(BITMAP_VFO_Empty); i++)
+                p_line0[i] = (p_line0[i] & 0x80) | BITMAP_VFO_Empty[i];
         }
+
         ST7565_BlitLine(RxLine);
     }
-    */
 #else
     const unsigned int line = 3;
 #endif
@@ -331,21 +328,21 @@ void DisplayRSSIBar(const bool now)
 #endif
         + dBmCorrTable[gRxVfo->Band];
 
-    rssi_dBm = -rssi_dBm;
+    // S9 = -93 dBm, S0 = -141 dBm (IARU standard)
+    const int16_t s9_dBm = -93;
+    const int16_t s0_dBm = -141;
 
-    if(rssi_dBm > 141) rssi_dBm = 141;
-    if(rssi_dBm < 53) rssi_dBm = 53;
-
-    uint8_t s_level = 0;
-    uint8_t overS9dBm = 0;
+    uint8_t s_level    = 0;
+    uint8_t overS9dBm  = 0;
     uint8_t overS9Bars = 0;
 
-    if(rssi_dBm >= 93) {
-        s_level = map(rssi_dBm, 141, 93, 1, 9);
-    }
-    else {
-        s_level = 9;
-        overS9dBm = map(rssi_dBm, 93, 53, 0, 40);
+    if (rssi_dBm <= s9_dBm) {
+        // Signal <= S9 : map between S0 and S9
+        s_level = map(rssi_dBm, s0_dBm, s9_dBm, 0, 9);
+    } else {
+        // Signal > S9 : compute over-S9
+        s_level    = 9;
+        overS9dBm  = map(rssi_dBm, s9_dBm, s9_dBm + 40, 0, 40);
         overS9Bars = map(overS9dBm, 0, 40, 0, 4);
     }
 #else
@@ -366,12 +363,12 @@ void DisplayRSSIBar(const bool now)
 #ifdef ENABLE_FEAT_F4HWN
     if (gSetting_set_gui)
     {
-        sprintf(str, "%3d", -rssi_dBm);
+        sprintf(str, "%3d", rssi_dBm);
         UI_PrintStringSmallNormal(str, LCD_WIDTH + 8, 0, line - 1);
     }
     else
     {
-        sprintf(str, "% 4d %s", -rssi_dBm, "dBm");
+        sprintf(str, "% 4d %s", rssi_dBm, "dBm");
         if(isMainOnly())
             GUI_DisplaySmallest(str, 2, 41, false, true);
         else
@@ -419,7 +416,7 @@ void DisplayRSSIBar(const bool now)
     uint8_t *pLine = (gEeprom.RX_VFO == 0)? gFrameBuffer[2] : gFrameBuffer[6];
     if (now)
         memset(pLine, 0, 23);
-    DrawSmallAntennaAndBars(pLine, Level);
+    DrawSmallPowerBars(pLine, Level);
     if (now)
         ST7565_BlitFullScreen();
 #endif
@@ -528,7 +525,7 @@ void UI_MAIN_TimeSlice500ms(void)
     }
 }
 
-// ***************************************************************************
+// ----------------------------------------
 
 void UI_DisplayMain(void)
 {
@@ -771,46 +768,51 @@ void UI_DisplayMain(void)
         {   // receiving .. show the RX symbol
             mode = VFO_MODE_RX;
             //if (FUNCTION_IsRx() && gEeprom.RX_VFO == vfo_num) {
-            if (FUNCTION_IsRx() && gEeprom.RX_VFO == vfo_num && VfoState[vfo_num] == VFO_STATE_NORMAL) {
+            if (FUNCTION_IsRx()) {
+                if (gEeprom.RX_VFO == vfo_num && VfoState[vfo_num] == VFO_STATE_NORMAL) {
 #ifdef ENABLE_FEAT_F4HWN
-                RxBlinkLed = 1;
-                RxBlinkLedCounter = 0;
-                RxLine = line;
-                RxOnVfofrequency = frequency;
-                if(!isMainVFO)
-                {
-                    RxBlink = 1;
-                }
-                else
-                {
-                    RxBlink = 0;
-                }
+                    RxBlinkLed = 1;
+                    RxBlinkLedCounter = 0;
+                    RxLine = line;
+                    RxOnVfofrequency = frequency;
+                    // if(!isMainVFO)
+                    // {
+                    //     RxBlink = 1;
+                    // }
+                    // else
+                    // {
+                    //     RxBlink = 0;
+                    // }
 
-                if (RxBlink == 0 || RxBlink == 1) {
-                    if(gRxVfo->Modulation == MODULATION_AM)
-                        GUI_DisplaySmallest("AIR", 10, RxLine == 0 ? 1 : 33, false, true);
-                    else {
-                        #ifdef ENABLE_FEAT_F4HWN_AUDIO
-                            strcpy(String, gSubMenu_SET_AUD[gSetting_set_audio]);
-                        #else
-                            strcpy(String, "RX");
-                        #endif
-                        GUI_DisplaySmallest(String, 10, RxLine == 0 ? 1 : 33, false, true);
-                    }
+                    // if (RxBlink == 0 || RxBlink == 1) {
+                        if(gRxVfo->Modulation == MODULATION_AM)
+                            GUI_DisplaySmallest("AIR", 10, RxLine == 0 ? 1 : 33, false, true);
+                        else {
+                            #ifdef ENABLE_FEAT_F4HWN_AUDIO
+                                strcpy(String, gSubMenu_SET_AUD[gSetting_set_audio]);
+                            #else
+                                strcpy(String, "RX");
+                            #endif
+                            GUI_DisplaySmallest(String, 10, RxLine == 0 ? 1 : 33, false, true);
+                        }
 
-                    //UI_PrintStringSmallBold("RX", 8, 0, RxLine);
-                }
+                        //UI_PrintStringSmallBold("RX", 8, 0, RxLine);
+                    // }
 #else
-                UI_PrintStringSmallBold("RX", 8, 0, line);
+                    UI_PrintStringSmallBold("RX", 8, 0, line);
 #endif
-            }
+                }
 #ifdef ENABLE_FEAT_F4HWN
-            else
-            {
-                if(RxOnVfofrequency == frequency && !isMainOnly())
-                {
-                    UI_PrintStringSmallNormal(">>", 8, 0, line);
+                else {
+                    if(RxBlinkLed == 1)
+                        RxBlinkLed = 2;
+                }
+            }
+            else {
+                if(RxOnVfofrequency == frequency && !isMainOnly()) {
+                    //UI_PrintStringSmallNormal(">>", 8, 0, line);
                     //memcpy(p_line0 + 14, BITMAP_VFO_Default, sizeof(BITMAP_VFO_Default));
+                    GUI_DisplaySmallest(">>", 8, RxLine == 0 ? 1 : 33, false, true);
                 }
 
                 if(RxBlinkLed == 1)
@@ -821,21 +823,60 @@ void UI_DisplayMain(void)
 
         if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo_num]))
         {   // channel mode
-            const unsigned int x = 3;
+            const unsigned int x = 1;
             const bool inputting = gInputBoxIndex != 0 && gEeprom.TX_VFO == vfo_num;
             if (!inputting || gScanStateDir != SCAN_OFF)
                 sprintf(String, "%04u", gEeprom.ScreenChannel[vfo_num] + 1);
             else
                 sprintf(String, "%.4s", INPUTBOX_GetAscii());  // show the input text
-            UI_PrintStringSmallNormalInverse(String, x, 0, line + 1);
+
+            //if (gSetting_set_gui) {
+                UI_PrintStringSmallNormalInverse(String, x, 0, line + 1);
+            /*
+            }
+            else
+            {
+                GUI_DisplaySmallest(String, x + 1, line == 0 ? 9 : 41, false, true);
+                gFrameBuffer[line + 1][0] ^= 0x1C;
+                gFrameBuffer[line + 1][1] ^= 0x3E;
+                for (uint8_t i = 2; i < 21; i++) {
+                    gFrameBuffer[line + 1][i] ^= 0x7F;
+                }
+                gFrameBuffer[line + 1][21] ^= 0x3E;
+                gFrameBuffer[line + 1][22] ^= 0x1C;
+
+            }
+            */
         }
         else if (IS_FREQ_CHANNEL(gEeprom.ScreenChannel[vfo_num]))
         {   // frequency mode
             // show the frequency band number
             const unsigned int x = 2;
-            char * buf = gEeprom.VfoInfo[vfo_num].pRX->Frequency < _1GHz_in_KHz ? "" : "+";
-            sprintf(String, "F%u%s", 1 + gEeprom.ScreenChannel[vfo_num] - FREQ_CHANNEL_FIRST, buf);
-            UI_PrintStringSmallNormal(String, x, 0, line + 1);
+            const uint8_t f = 1 + gEeprom.ScreenChannel[vfo_num] - FREQ_CHANNEL_FIRST;
+            const bool over1GHz = gEeprom.VfoInfo[vfo_num].pRX->Frequency >= _1GHz_in_KHz;
+
+            sprintf(String, over1GHz ? "F%u+" : "F%u", f);
+            //if (gSetting_set_gui) {
+                UI_PrintStringSmallNormalInverse(String, x, 0, line + 1);
+            /*
+            }
+            else
+            {
+                GUI_DisplaySmallest(String, x + 2, line == 0 ? 9 : 41, false, true);
+                uint8_t g = 13;
+                if(over1GHz)
+                    g = 17;
+
+                gFrameBuffer[line + 1][0] ^= 0x1C;
+                gFrameBuffer[line + 1][1] ^= 0x3E;
+                for (uint8_t i = 2; i < g; i++) {
+                    gFrameBuffer[line + 1][i] ^= 0x7F;
+                }
+                gFrameBuffer[line + 1][g] ^= 0x3E;
+                gFrameBuffer[line + 1][g + 1] ^= 0x1C;
+
+            }
+            */
         }
 #ifdef ENABLE_NOAA
         else
@@ -852,7 +893,7 @@ void UI_DisplayMain(void)
         }
 #endif
 
-        // ************
+        // ----------------------------------------
 
         enum VfoState_t state = VfoState[vfo_num];
 
@@ -917,20 +958,44 @@ void UI_DisplayMain(void)
                         countList = 0;
                     }
 
-                    const char *displayStr = (countList == MR_CHANNELS_LIST + 1) ? "ALL" : 
-                                             (countList == 0) ? "OFF" : String;
-                    uint8_t xStart = (countList > 0 && countList != MR_CHANNELS_LIST + 1) ? 117 : 113;
-                    uint8_t xDisplay = (countList > 0 && countList != MR_CHANNELS_LIST + 1) ? 119 : 115;
+                    const char *displayStr;
+                    uint8_t xStart, xDisplay;
 
-                    if(countList > 0 && countList != MR_CHANNELS_LIST + 1) {
-                        sprintf(String, "%02d", countList);
+                    if (countList == MR_CHANNELS_LIST + 1) {
+                        displayStr = "ALL";
+                        xStart = 113;
+                        xDisplay = 115;
+                    } 
+                    else if (countList == 0) {
+                        displayStr = "OFF";
+                        xStart = 113;
+                        xDisplay = 115;
+                    } 
+                    else {
+                        // List 1 to MR_CHANNELS_LIST
+                        const char *name = gListName[countList - 1];
+                        
+                        // If name is empty/invalid, display number
+                        if (name[0] == '\0' || name[0] == '\xff' || name[0] == ' ') {
+                            sprintf(String, "%02d", countList);
+                            xStart = 117;  // 2-digit number aligned right
+                            xDisplay = 119;
+                        } 
+                        else {
+                            sprintf(String, "%.3s", name);
+                            xStart = 113;  // 3-char name aligned left
+                            xDisplay = 115;
+                        }
+                        displayStr = String;
                     }
 
-                    GUI_DisplaySmallest(displayStr, xDisplay, line == 0 ? 2 : 34, false, true);
+                    GUI_DisplaySmallest(displayStr, xDisplay, line == 0 ? 1 : 33, false, true);
 
-                    for (uint8_t x = xStart; x < 128; x++) {
-                        gFrameBuffer[line][x] ^= 0xFE;
+                    gFrameBuffer[line][xStart] ^= 0x3E;
+                    for (uint8_t x = xStart + 1; x < 127; x++) {
+                        gFrameBuffer[line][x] ^= 0x7F;
                     }
+                    gFrameBuffer[line][127] ^= 0x3E;
 
                 }
                 else
@@ -940,10 +1005,10 @@ void UI_DisplayMain(void)
                     uint8_t xStart = 117;
                     uint8_t xDisplay = 119;
                     
-                    GUI_DisplaySmallest(displayStr, xDisplay, line == 0 ? 2 : 34, false, true);
+                    GUI_DisplaySmallest(displayStr, xDisplay, line == 0 ? 1 : 33, false, true);
 
                     for (uint8_t x = xStart; x < 128; x++) {
-                        gFrameBuffer[line][x] ^= 0xFE;
+                        gFrameBuffer[line][x] ^= 0x7F;
                     }
                 }
 
@@ -983,7 +1048,7 @@ void UI_DisplayMain(void)
                         break;
 
                     case MDF_CHANNEL:   // show the channel number
-                        sprintf(String, "CH-%03u", gEeprom.ScreenChannel[vfo_num] + 1);
+                        sprintf(String, "CH-%04u", gEeprom.ScreenChannel[vfo_num] + 1);
                         UI_PrintString(String, 36, 0, line, 8);
                         break;
 
@@ -993,19 +1058,19 @@ void UI_DisplayMain(void)
                         SETTINGS_FetchChannelName(String, gEeprom.ScreenChannel[vfo_num]);
                         if (String[0] == 0)
                         {   // no channel name, show the channel number instead
-                            sprintf(String, "CH-%03u", gEeprom.ScreenChannel[vfo_num] + 1);
+                            sprintf(String, "CH-%04u", gEeprom.ScreenChannel[vfo_num] + 1);
                         }
 
                         if (gEeprom.CHANNEL_DISPLAY_MODE == MDF_NAME) {
-                            String[9] = 0;
-                            UI_PrintString(String, 36, 0, line, 8);
+                            String[10] = 0;
+                            UI_PrintString(String, 33, 0, line, 8);
                         }
                         else {
 #ifdef ENABLE_FEAT_F4HWN
                             if (isMainOnly())
                             {
-                                String[9] = 0;
-                                UI_PrintString(String, 36, 0, line, 8);
+                                String[10] = 0;
+                                UI_PrintString(String, 33, 0, line, 8);
                             }
                             else
                             {
@@ -1082,7 +1147,7 @@ void UI_DisplayMain(void)
             }
         }
 
-        // ************
+        // ----------------------------------------
 
         {   // show the TX/RX level
             int8_t Level = -1;
@@ -1121,10 +1186,10 @@ void UI_DisplayMain(void)
                 #endif
             }
             if(Level >= 0)
-                DrawSmallAntennaAndBars(p_line1 + LCD_WIDTH, Level);
+                DrawSmallPowerBars(p_line1 + LCD_WIDTH, Level);
         }
 
-        // ************
+        // ----------------------------------------
 
         String[0] = '\0';
         const VFO_Info_t *vfoInfo = &gEeprom.VfoInfo[vfo_num];
@@ -1530,11 +1595,21 @@ void UI_DisplayMain(void)
     if (isMainOnly() && !gDTMF_InputMode)
     {
         sprintf(String, "VFO %s", activeTxVFO ? "B" : "A");
+        GUI_DisplaySmallest(String, 107, 50, false, true);
+
+        gFrameBuffer[6][105] ^= 0x7C;
+        for (uint8_t x = 106; x < 127; x++) {
+            gFrameBuffer[6][x] ^= 0xFE;
+        }
+        gFrameBuffer[6][127] ^= 0x7C;
+
+        /*
         UI_PrintStringSmallBold(String, 92, 0, 6);
         for (uint8_t i = 92; i < 128; i++)
         {
             gFrameBuffer[6][i] ^= 0x7F;
         }
+        */
     }
     //#ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
     //}
@@ -1543,5 +1618,3 @@ void UI_DisplayMain(void)
 
     ST7565_BlitFullScreen();
 }
-
-// ***************************************************************************

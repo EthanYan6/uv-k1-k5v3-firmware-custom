@@ -273,18 +273,9 @@ static void HandleReceive(void)
             break;
 
         case CODE_TYPE_CONTINUOUS_TONE:
-            if (gFoundCTCSS && gFoundCTCSSCountdown_10ms == 0)
-            {
-                gFoundCTCSS = false;
-                gFoundCDCSS = false;
-                Mode        = END_OF_RX_MODE_END;
-                goto Skip;
-            }
-            break;
-
         case CODE_TYPE_DIGITAL:
         case CODE_TYPE_REVERSE_DIGITAL:
-            if (gFoundCDCSS && gFoundCDCSSCountdown_10ms == 0)
+            if ((gFoundCTCSS && gFoundCTCSSCountdown_10ms == 0) || (gFoundCDCSS && gFoundCDCSSCountdown_10ms == 0))
             {
                 gFoundCTCSS = false;
                 gFoundCDCSS = false;
@@ -1133,14 +1124,7 @@ void APP_Update(void)
             // go back to sleep
 
 #ifdef ENABLE_FEAT_F4HWN_SLEEP
-            if(gWakeUp)
-            {
-                gPowerSave_10ms = gEeprom.BATTERY_SAVE * 200; // deep sleep now indexed on BatSav
-            }
-            else
-            {
-                gPowerSave_10ms = gEeprom.BATTERY_SAVE * 10;
-            }
+            gPowerSave_10ms = gEeprom.BATTERY_SAVE * (gWakeUp ? 200 : 10); // deep sleep now indexed on BatSav
 #else
             gPowerSave_10ms = gEeprom.BATTERY_SAVE * 10;
 #endif
@@ -1535,7 +1519,6 @@ void cancelUserInputModes(void)
         gWasFKeyPressed     = false;
         gInputBoxIndex      = 0;
         gKeyInputCountdown  = 0;
-        gBeepToPlay         = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         gUpdateStatus       = true;
         gUpdateDisplay      = true;
     }
@@ -1558,15 +1541,13 @@ void APP_TimeSlice500ms(void)
         if (--gKeyInputCountdown == 0)
         {
 
-            if (IS_MR_CHANNEL(gTxVfo->CHANNEL_SAVE) && (gInputBoxIndex == 1 || gInputBoxIndex == 2))
+            if (IS_MR_CHANNEL(gTxVfo->CHANNEL_SAVE) && (gInputBoxIndex > 0 && gInputBoxIndex < 4))
             {
                 channelMoveSwitch();
 
                 if (gBeepToPlay == BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL) {
                     AUDIO_PlayBeep(gBeepToPlay);
                 }
-
-                SETTINGS_SaveVfoIndices();
             }
 
             cancelUserInputModes();
@@ -1936,6 +1917,7 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
             // cancel user input
             cancelUserInputModes();
+            gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
 
             if (gMonitor)
                 ACTION_Monitor(); //turn off the monitor
@@ -2126,18 +2108,14 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         }
 #endif
     }
+    else if (gScreenToDisplay != DISPLAY_INVALID && (
+            (Key != KEY_SIDE1 && Key != KEY_SIDE2)
 #ifdef ENABLE_FEAT_F4HWN // For F + SIDE1 or F + SIDE2
-    else if (gWasFKeyPressed && (Key == KEY_SIDE1 || Key == KEY_SIDE2)) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
-    else if (Key != KEY_SIDE1 && Key != KEY_SIDE2 && gScreenToDisplay != DISPLAY_INVALID) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
-#else
-    else if (Key != KEY_SIDE1 && Key != KEY_SIDE2 && gScreenToDisplay != DISPLAY_INVALID) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
+            || (gWasFKeyPressed && (Key == KEY_SIDE1 || Key == KEY_SIDE2))
 #endif
+    )) {
+        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
+    }
     else if (!SCANNER_IsScanning()
 #ifdef ENABLE_AIRCOPY
             && gScreenToDisplay != DISPLAY_AIRCOPY
@@ -2192,7 +2170,7 @@ Skip:
     }
 
     if (gRequestSaveChannel > 0) { // TODO: remove the gRequestSaveChannel, why use global variable for that??
-        if ((!bKeyHeld && !bKeyPressed) || (UI_MENU_GetCurrentMenuId() != 0 && gScreenToDisplay == DISPLAY_MENU))
+        if ((!bKeyHeld && !bKeyPressed) || (UI_MENU_GetCurrentMenuId() != 0 && gScreenToDisplay == DISPLAY_MENU) || gScreenToDisplay == DISPLAY_SCANNER)
         {
             SETTINGS_SaveChannel(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, gTxVfo, gRequestSaveChannel);
 
