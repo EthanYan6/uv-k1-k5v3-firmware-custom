@@ -157,15 +157,6 @@ const uint8_t BITMAP_USB_C[9] =
     };
 #endif
 
-const uint8_t BITMAP_Antenna[5] =
-{
-    0b00000011,
-    0b00000101,
-    0b01111111,
-    0b00000101,
-    0b00000011
-};
-
 const uint8_t BITMAP_VFO_Lock[7] =
 {
     0b00111100,
@@ -177,6 +168,7 @@ const uint8_t BITMAP_VFO_Lock[7] =
     0b00111100,
 };
 
+/*
 const uint8_t BITMAP_VFO_Default[7] =
 {
     0b01111111,
@@ -197,6 +189,42 @@ const uint8_t BITMAP_VFO_NotDefault[7] =
     0b00010100,
     0b00010100,
     0b00001000
+};
+*/
+
+// Compact arrow
+const uint8_t BITMAP_VFO_Default[7] =
+{
+    0b00111110,
+    0b00111110,
+    0b00011100,
+    0b00011100,
+    0b00001000,
+    0b00001000,
+    0b00000000
+};
+
+// Compact empty arrow
+const uint8_t BITMAP_VFO_NotDefault[7] =
+{
+    0b00100010,
+    0b00100010,
+    0b00010100,
+    0b00010100,
+    0b00001000,
+    0b00001000,
+    0b00000000
+};
+
+const uint8_t BITMAP_VFO_Empty[7] =
+{
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000
 };
 
 const uint8_t BITMAP_compand[6] =

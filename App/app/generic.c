@@ -39,7 +39,7 @@
 
 void GENERIC_Key_F(bool bKeyPressed, bool bKeyHeld)
 {
-    if (gInputBoxIndex > 0) {
+    if (gInputBoxIndex > 0 || gScreenToDisplay == DISPLAY_MENU) {
         if (!bKeyHeld && bKeyPressed) // short pressed
             gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         return;

@@ -44,23 +44,23 @@ void UI_GenerateChannelString(char *pString, const uint16_t Channel)
 void UI_GenerateChannelStringEx(char *pString, const bool bShowPrefix, const uint16_t ChannelNumber)
 {
     if (gInputBoxIndex > 0) {
-        for (unsigned int i = 0; i < 3; i++) {
+        for (unsigned int i = 0; i < 4; i++) {
             pString[i] = (gInputBox[i] == 10) ? '-' : gInputBox[i] + '0';
         }
 
-        pString[3] = 0;
+        pString[4] = 0;
         return;
     }
 
     if (bShowPrefix) {
         // BUG here? Prefixed NULLs are allowed
-        sprintf(pString, "CH-%03u", ChannelNumber + 1);
+        sprintf(pString, "CH-%04u", ChannelNumber + 1);
     } else if (ChannelNumber == MR_CHANNEL_LAST + 1) {
         strcpy(pString, "None");
     } else if (ChannelNumber == 0xFFFF) {
         strcpy(pString, "NULL");
     } else {
-        sprintf(pString, "%03u", ChannelNumber + 1);
+        sprintf(pString, "%04u", ChannelNumber + 1);
     }
 }
 
