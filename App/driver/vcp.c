@@ -63,11 +63,11 @@ bool VCP_ScreenshotPing(void)
     //   KEY_3  → <b>  → KEYBOARD_InjectKey(b, false), IDLE
     //   KEY_3L → <b>  → KEYBOARD_InjectKey(b, true), IDLE
 
-    static uint32_t     read_ptr = 0;
+    static uint8_t      read_ptr = 0;
     static ParseState_t state    = STATE_IDLE;
 
     bool     connected = false;
-    uint32_t write_ptr = VCP_RxBufPointer;  // snapshot once — ISR may update concurrently
+    uint8_t  write_ptr = VCP_RxBufPointer;  // snapshot once — ISR may update concurrently
 
     // Cap bytes processed per call to VCP_RX_BUF_SIZE.
     // Prevents unbounded loop if the ISR write pointer laps read_ptr
@@ -83,15 +83,8 @@ bool VCP_ScreenshotPing(void)
             read_ptr = 0;
         processed++;
 
-        if(KEYBOARD_ProcessProtocolByte(&state, b)) {
-            // Clear the last 4 bytes after reading - prevents the button from
-            // being pressed automatically after a certain amount of time.
-            for (uint8_t i = 1; i <= 4; i++) {
-                VCP_RxBuf[(read_ptr - i) & 0xFF] = 0x00;
-            }
-
+        if(KEYBOARD_ProcessProtocolByte(&state, b))
             connected = true;
-        }
     }
 
     return connected;
