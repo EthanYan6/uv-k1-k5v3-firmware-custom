@@ -276,22 +276,6 @@ void AIRCOPY_StorePacket(void)
     }
 
     uint16_t Offset = g_FSK_Buffer[1];
-    const AIRCOPY_TransferMap_t *map = AIRCOPY_GetCurrentMap();
-
-    // Validate offset is in the map
-    bool validOffset = false;
-    for (uint16_t i = 0; i < map->num_segments; i++) {
-        if (Offset >= map->segments[i].start_offset && Offset < map->segments[i].end_offset) {
-            validOffset = true;
-            break;
-        }
-    }
-
-    if (!validOffset) {
-        gErrorsDuringAirCopy++;
-        AIRCOPY_CheckComplete();
-        return;
-    }
 
     const AIRCOPY_Segment_t *seg = AIRCOPY_FindSegmentForOffset(Offset);
     

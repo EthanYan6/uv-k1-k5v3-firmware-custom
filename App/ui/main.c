@@ -345,12 +345,12 @@ void DisplayRSSIBar(const bool now)
     // else if (rssi_dBm >= -141) s_level = 1;  // S1  = -141 dBm
     // else                       s_level = 0;  // S0 (below -141 dBm)
 
-    s_level = (rssi_dBm + 147) / 6;
-
-    if (s_level > 9)
+    if (rssi_dBm >= -93)
         s_level = 9;
-    else if (s_level < 0)
+    else if (rssi_dBm < -141)
         s_level = 0;
+    else 
+        s_level = (rssi_dBm + 147) / 6;
 
     if (s_level == 9) {
         // Compute over-S9 dB directly
