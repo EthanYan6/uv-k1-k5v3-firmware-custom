@@ -54,6 +54,14 @@ static void convertTime(uint8_t *line, uint8_t type)
 #endif
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN
+bool UI_IsDualVfoMainScreen(void)
+{
+    return gScreenToDisplay == DISPLAY_MAIN && !gAirCopyBootMode &&
+           (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF || gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF);
+}
+#endif
+
 void UI_DisplayStatus()
 {
     char str[8] = "";
@@ -145,6 +153,10 @@ void UI_DisplayStatus()
         ST7565_BlitStatusLine();
         return;
     }
+
+    /* 双 VFO 主界面：不单独刷空白状态行；顶行由 ST7565_BlitFullScreenDualVfoTightTop 与 gFrameBuffer[0] 合并输出 */
+    if (UI_IsDualVfoMainScreen())
+        return;
 #endif
 
     uint8_t     *line = gStatusLine;

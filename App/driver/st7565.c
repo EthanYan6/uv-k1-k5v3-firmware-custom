@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 #include <stdio.h>     // NULL
+#include <string.h>    // memcpy
 
 #include "py32f071_ll_bus.h"
 #include "py32f071_ll_spi.h"
@@ -142,15 +143,19 @@ void ST7565_DrawLine(const unsigned int Column, const unsigned int Line, const u
         {
             DrawLine(0, 0, gStatusLine, LCD_WIDTH);
         }
-        else if(line <= FRAME_LINES)
+        else if(line >= 1 && line <= 7)
         {
             DrawLine(0, line, gFrameBuffer[line - 1], LCD_WIDTH);
         }
         else
         {
-            for (line = 1; line <= FRAME_LINES; line++) {
-                DrawLine(0, line, gFrameBuffer[line - 1], LCD_WIDTH);
-            }
+            /*
+             * 全屏刷新：只更新硬件行 1..7 ← gFrameBuffer[0]..[6]。
+             * 硬件行 0 仅由 ST7565_BlitStatusLine() / MAIN ONLY 顶栏 维护，切勿 memcpy 用 fb[0] 覆盖 gStatusLine。
+             * 双 VFO 主界面使用 ST7565_BlitFullScreenDualVfoTightTop()，不走此分支。
+             */
+            for (unsigned l = 1; l <= 7u; l++)
+                DrawLine(0, l, gFrameBuffer[l - 1u], LCD_WIDTH);
         }
 
         CS_Release();
@@ -159,6 +164,20 @@ void ST7565_DrawLine(const unsigned int Column, const unsigned int Line, const u
     void ST7565_BlitFullScreen(void)
     {
         ST7565_BlitScreen(8);
+    }
+
+    /*
+     * 双 VFO 主界面：gFrameBuffer[0] 映硬件 line 0（经 gStatusLine），[1]..[7] 映 line 1..7。
+     */
+    void ST7565_BlitFullScreenDualVfoTightTop(void)
+    {
+        CS_Assert();
+        ST7565_WriteByte(0x40);
+        memcpy(gStatusLine, gFrameBuffer[0], LCD_WIDTH);
+        DrawLine(0, 0, gStatusLine, LCD_WIDTH);
+        for (unsigned line = 1; line < FRAME_LINES; line++)
+            DrawLine(0, line, gFrameBuffer[line], LCD_WIDTH);
+        CS_Release();
     }
 
     void ST7565_BlitLine(unsigned line)

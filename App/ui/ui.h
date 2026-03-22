@@ -54,4 +54,8 @@ extern bool              gAskToDelete;
 void GUI_DisplayScreen(void);
 void GUI_SelectNextDisplay(GUI_DisplayType_t Display);
 
+#ifdef ENABLE_FEAT_F4HWN
+bool UI_IsDualVfoMainScreen(void);
+#endif
+
 #endif
