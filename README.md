@@ -1,14 +1,14 @@
-# F4HWN-R7
+# BD1AHN-UVK1-UVK5/K6-V3
 
 > firmware port for the UV-K1 and UV-K5 V3 using the PY32F071 MCU
 
 1. 基于F4HWN固件，添加仿R7的页面。请切换分支 `motorola_r7` 进行编译
+2. 模仿`joaquimorg / UV-KX-firmware` 固件修改了双信道的页面
 
 ### 主界面示意
 
 ## 主页面 (MAIN ONLY) 元素说明
-![2a6cb0206000126806cab17161009f0f](https://github.com/user-attachments/assets/9c1f781c-d15b-4fc6-8be2-722d9cdfa7bc)![303d2991af1d6e26238b19ff5aac62aa](https://github.com/user-attachments/assets/2f870472-619b-40e0-b24d-5c8a17980c62)
-
+<img width="643" height="407" alt="image" src="https://github.com/user-attachments/assets/2097c20d-58fc-4577-ba84-dbfc83876e03" />
 
 ### 如何进入主页面
 
