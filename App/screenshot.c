@@ -20,6 +20,7 @@
 #include "misc.h"
 #include "driver/vcp.h"
 #include "driver/keyboard.h"
+#include "ui/ui.h"
 
 static void Screenshot_Send(const uint8_t *buf, uint16_t len)
 {
@@ -68,29 +69,49 @@ void getScreenShot(bool force)
     }
 
     // ==== BUILD FRAME ONCE ====
-    // Status line: 8 bit layers × 128 columns
-    for (uint8_t b = 0; b < 8; b++) {
-        for (uint8_t i = 0; i < 128; i++) {
-            uint8_t bit = (gStatusLine[i] >> b) & 0x01;
-            acc |= (bit << bitCount++);
-            if (bitCount == 8) {
-                frameBuffer[index++] = acc;
-                acc = 0;
-                bitCount = 0;
+    // Dual VFO tight-top pages are physically displayed as gFrameBuffer[0..7].
+    // Legacy pages are displayed as gStatusLine + gFrameBuffer[0..6].
+    const bool dualTightTop = UI_IsDualVfoMainScreen();
+
+    if (dualTightTop) {
+        for (uint8_t l = 0; l < 8; l++) {
+            for (uint8_t b = 0; b < 8; b++) {
+                for (uint8_t i = 0; i < 128; i++) {
+                    uint8_t bit = (gFrameBuffer[l][i] >> b) & 0x01;
+                    acc |= (bit << bitCount++);
+                    if (bitCount == 8) {
+                        frameBuffer[index++] = acc;
+                        acc = 0;
+                        bitCount = 0;
+                    }
+                }
             }
         }
-    }
-
-    // Frame buffer: 7 lines × 8 bit layers × 128 columns
-    for (uint8_t l = 0; l < 7; l++) {
+    } else {
+        // Status line: 8 bit layers × 128 columns
         for (uint8_t b = 0; b < 8; b++) {
             for (uint8_t i = 0; i < 128; i++) {
-                uint8_t bit = (gFrameBuffer[l][i] >> b) & 0x01;
+                uint8_t bit = (gStatusLine[i] >> b) & 0x01;
                 acc |= (bit << bitCount++);
                 if (bitCount == 8) {
                     frameBuffer[index++] = acc;
                     acc = 0;
                     bitCount = 0;
+                }
+            }
+        }
+
+        // Frame buffer: 7 lines × 8 bit layers × 128 columns
+        for (uint8_t l = 0; l < 7; l++) {
+            for (uint8_t b = 0; b < 8; b++) {
+                for (uint8_t i = 0; i < 128; i++) {
+                    uint8_t bit = (gFrameBuffer[l][i] >> b) & 0x01;
+                    acc |= (bit << bitCount++);
+                    if (bitCount == 8) {
+                        frameBuffer[index++] = acc;
+                        acc = 0;
+                        bitCount = 0;
+                    }
                 }
             }
         }

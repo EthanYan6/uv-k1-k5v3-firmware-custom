@@ -184,25 +184,25 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #define DUAL_VFO_AB_BOT_H  (DUAL_VFO_AB_TALL_H + 2u)
 #define DUAL_VFO_AB_BOT_W  (DUAL_VFO_AB_TALL_W + 2u)
 #define DV_Y_TOP_HDR   0u
-#define DV_Y_TOP_AB    9u  /* 较前一版下移 2px */
+#define DV_Y_TOP_AB    10u /* 主信道 A/B 及其下方信道号下移 2px */
 #define DV_Y_TOP_CH    9u  /* 主信道右侧 2x 频率基线 */
 #define DV_Y_TOP_DET   22u
 #define DV_Y_BOT_HDR   29u
-#define DV_Y_BOT_MAIN       40u /* 下面信道：A/B 框顶 y；旁信道号/RX 用 DV_Y_BOT_BESIDE_AB */
+#define DV_Y_BOT_MAIN       39u /* A/B 上移 1px；旁信道号/RX 用 DV_Y_BOT_BESIDE_AB */
 #define DV_Y_BOT_BESIDE_AB  (DV_Y_BOT_MAIN + 2u) /* 框旁信道号、RX、TX 字下移 2px */
 #define DV_Y_BOT_FREQ_LINE  ((DV_Y_BOT_MAIN + DUAL_VFO_AB_BOT_H + 1u) - 10u) /* 较原单独行位置上移 10px */
 /* 底栏：S 表在左；右为电池 8px + 其下居中百分比；DV_Y_METER 对齐电池页顶 */
-#define DV_Y_METER          48u
+#define DV_Y_METER          50u /* 电池图标（及底栏）下移 2px */
 #define DV_BAT_ICON_H       8u
-#define DV_Y_PCT            (DV_Y_METER + DV_BAT_ICON_H + 2u) /* 图标正下方再下移 2px */
-#define DV_Y_RXMODE         (DV_Y_METER + 8u)            /* RxMode 较图标行下移 8px */
+#define DV_Y_PCT            (DV_Y_METER + DV_BAT_ICON_H - 1u) /* 百分比下移 1px */
+#define DV_Y_RXMODE         (DV_Y_METER + 7u)            /* 右下角 A/B 模式上移 4px */
 #define DV_BAT_FLUSH_RIGHT  0u /* batX = LCD_WIDTH - batW - 此值，0 即贴右 */
-#define DV_BAT_MODE_SHIFT_R 2u /* RxMode 再右移；与 gap 合计须保证 rxX+rxW<=batX */
+#define DV_BAT_MODE_SHIFT_R (-1) /* 右下角 A/B 模式相对原布局左移 3px（原 +2 -> 现 -1） */
 #define DV_BAT_PCT_SHIFT_R  2u /* 电量百分比再右移 */
 /* S 表：刻度较原下移 5px；其下横条 + 9 条竖线；S/+dB 与「1-3-5-7-9」右端隔 2px，两行同 x */
 #define DV_SMETER_BAR_X0    1u
 #define DV_SMETER_BAR_W     33u
-#define DV_SMETER_LABEL_Y   (DV_Y_METER + 5u)
+#define DV_SMETER_LABEL_Y   (DV_Y_METER + 3u) /* S 表整体上移 2px */
 #define DV_SMETER_SCALE_W   (9u * 4u) /* "1-3-5-7-9" 最小字宽 */
 #define DV_SMETER_S_GAP     2u        /* 刻度末字符与 S 读数间隔 */
 #define DV_SMETER_SREAD_X   (DV_SMETER_SCALE_W + DV_SMETER_S_GAP)
@@ -246,78 +246,75 @@ static void DualVfoClearRectPx(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1)
             PutPixel(xx, yy, false);
 }
 
-/* 最小号字体每个字符横向放大 2 倍、纵向 2 倍（主信道频率） */
+/* 频率数字样式：用 gFontBigDigits(10x16) 做缩放，接近截图里的粗体数字风格 */
+static bool DualVfoBigDigitPixel(char ch, uint8_t sx, uint8_t sy)
+{
+    if (ch < '0' || ch > '9')
+        return false;
+    if (sx >= 10u || sy >= 16u)
+        return false;
+
+    const uint8_t *glyph = gFontBigDigits[(uint8_t)(ch - '0')];
+    if (sy < 8u)
+        return ((glyph[sx] >> sy) & 1u) != 0u;
+    return ((glyph[10u + sx] >> (sy - 8u)) & 1u) != 0u;
+}
+
+static void DualVfoDrawScaledBigDigit(char ch, uint8_t x0, uint8_t y0, uint8_t dstW, uint8_t dstH)
+{
+    for (uint8_t dx = 0; dx < dstW; dx++)
+    {
+        const uint8_t sx = (uint8_t)((uint16_t)dx * 10u / dstW);
+        for (uint8_t dy = 0; dy < dstH; dy++)
+        {
+            const uint8_t sy = (uint8_t)((uint16_t)dy * 16u / dstH);
+            if (DualVfoBigDigitPixel(ch, sx, sy))
+                PutPixel((uint8_t)(x0 + dx), (uint8_t)(y0 + dy), true);
+        }
+    }
+}
+
+/* 主频：每字符 8px 步进，数字本体 7x12，风格接近截图 */
 static uint8_t DualVfoDrawString2x(uint8_t x0, uint8_t y0, const char *s)
 {
     uint8_t x = x0;
     for (; *s; s++)
     {
         const char ch = *s;
-        if ((uint8_t)ch < 0x20u || (uint8_t)ch > 0x7fu)
+        if (ch >= '0' && ch <= '9')
         {
-            x = (uint8_t)(x + 8u);
-            continue;
+            DualVfoDrawScaledBigDigit(ch, x, y0, 7u, 12u);
         }
-        const uint8_t ci = (uint8_t)(ch - 0x20u);
-        for (unsigned col = 0; col < 3u; col++)
+        else if (ch == '.')
         {
-            uint8_t pixels = gFont3x5[ci][col];
-            for (unsigned row = 0; row < 6u; row++)
-            {
-                if (pixels & 1u)
-                {
-                    for (unsigned dy = 0; dy < 2u; dy++)
-                        for (unsigned dx = 0; dx < 2u; dx++)
-                            PutPixel((uint8_t)(x + col * 2u + dx), (uint8_t)(y0 + row * 2u + dy), true);
-                }
-                pixels >>= 1;
-            }
+            /* 小数点放在下沿，3px 宽 */
+            PutPixel((uint8_t)(x + 1u), (uint8_t)(y0 + 10u), true);
+            PutPixel((uint8_t)(x + 2u), (uint8_t)(y0 + 10u), true);
+            PutPixel((uint8_t)(x + 1u), (uint8_t)(y0 + 11u), true);
+            PutPixel((uint8_t)(x + 2u), (uint8_t)(y0 + 11u), true);
         }
         x = (uint8_t)(x + 8u);
     }
     return x;
 }
 
-/* 副信道频率：3x5 映射到 DUAL_VFO_SUB_FREQ_H；列宽 2+2+1；每源行填满 dr0..dr1-1 */
+/* 副频：保持原行高 8px，数字本体 5x8，但沿用与主频一致的数字骨架 */
 static uint8_t DualVfoDrawStringSubFreqTall(uint8_t x0, uint8_t y0, const char *s)
 {
-    static const uint8_t colW[3] = {2u, 2u, 1u};
-    uint8_t              x       = x0;
+    uint8_t x = x0;
     for (; *s; s++)
     {
         const char ch = *s;
-        if ((uint8_t)ch < 0x20u || (uint8_t)ch > 0x7fu)
+        if (ch >= '0' && ch <= '9')
         {
-            x = (uint8_t)(x + DUAL_VFO_SUB_FREQ_CHAR_W);
-            continue;
+            DualVfoDrawScaledBigDigit(ch, x, y0, 5u, DUAL_VFO_SUB_FREQ_H);
         }
-        const uint8_t ci = (uint8_t)(ch - 0x20u);
-        uint8_t       cx = x;
-        for (unsigned col = 0; col < 3u; col++)
+        else if (ch == '.')
         {
-            uint8_t pixels = gFont3x5[ci][col];
-            for (unsigned sr = 0; sr < 6u; sr++)
-            {
-                const unsigned dr0 = (sr * DUAL_VFO_SUB_FREQ_H) / 6u;
-                const unsigned dr1 = ((sr + 1u) * DUAL_VFO_SUB_FREQ_H + 5u) / 6u;
-                if (pixels & 1u)
-                {
-                    unsigned dend = dr1;
-                    if (dend > DUAL_VFO_SUB_FREQ_H)
-                        dend = DUAL_VFO_SUB_FREQ_H;
-                    for (unsigned dx = 0; dx < (unsigned)colW[col]; dx++)
-                    {
-                        const uint8_t pxCol = (uint8_t)(cx + (uint8_t)dx);
-                        if (pxCol < LCD_WIDTH)
-                        {
-                            for (unsigned dr = dr0; dr < dend; dr++)
-                                PutPixel(pxCol, (uint8_t)(y0 + (uint8_t)dr), true);
-                        }
-                    }
-                }
-                pixels >>= 1;
-            }
-            cx = (uint8_t)(cx + colW[col]);
+            PutPixel((uint8_t)(x + 1u), (uint8_t)(y0 + DUAL_VFO_SUB_FREQ_H - 2u), true);
+            PutPixel((uint8_t)(x + 2u), (uint8_t)(y0 + DUAL_VFO_SUB_FREQ_H - 2u), true);
+            PutPixel((uint8_t)(x + 1u), (uint8_t)(y0 + DUAL_VFO_SUB_FREQ_H - 1u), true);
+            PutPixel((uint8_t)(x + 2u), (uint8_t)(y0 + DUAL_VFO_SUB_FREQ_H - 1u), true);
         }
         x = (uint8_t)(x + DUAL_VFO_SUB_FREQ_CHAR_W);
     }
@@ -443,9 +440,9 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
                 const uint8_t smCellW  = 4u;
                 const uint8_t smH      = 6u;
                 const uint8_t tx =
-                    (uint8_t)(innerL + (abW > smCellW ? (uint8_t)((abW - smCellW) / 2u) : 0u));
+                    (uint8_t)(innerL + (abW > smCellW ? (uint8_t)((abW - smCellW) / 2u) : 0u) + 1u);
                 const uint8_t ty =
-                    (uint8_t)(y + (abH > smH ? (uint8_t)((abH - smH) / 2u) : 0u));
+                    (uint8_t)(y + (abH > smH ? (uint8_t)((abH - smH) / 2u) : 0u) + 1u);
                 GUI_DisplaySmallest(abStr, tx, ty, false, true);
             }
         }
