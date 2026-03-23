@@ -73,6 +73,7 @@
 - **接收 (RX)**：与系统原逻辑一致。进入接收时重置为 00:00，在接收状态下正计时。
 
 ## 新页面（双 VFO 紧凑页）说明
+<img width="639" height="402" alt="image" src="https://github.com/user-attachments/assets/30ddf9ec-7244-44b9-9f34-3dfe35b7d42f" />
 
 > 适用 RxMode 非 `MAIN ONLY`（如 A/B、CROSS 等）时的双信道主界面。
 
