@@ -279,16 +279,17 @@ void UI_DisplayAudioScope(void)
         s_was_tx           = true;
     }
 
-    g_scope_buf[g_scope_write] = BK4819_GetVoiceAmplitudeOut();
-
-    // Let’s assume that values below 200 may be incorrect
-    // to avoid full-height bars that may appear on the first TX
-    if (g_scope_ready < SCOPE_SAMPLES) {
+    // The first 7 bars after turning on the radio
+    // will not display any values: they cause high bars.
+    if (g_scope_ready >= 7)
+        g_scope_buf[g_scope_write] = BK4819_GetVoiceAmplitudeOut();
+    else
         g_scope_ready++;
         
-        if (g_scope_buf[g_scope_write] < SCOPE_VOLUME_MIN) 
-            g_scope_buf[g_scope_write] = SCOPE_VOLUME_MIN;
-    }
+    // If the reading is 0, it is definitely an incorrect value
+    // caused by the microphone being muted - set it to 200.
+    if (g_scope_buf[g_scope_write] == 0) 
+        g_scope_buf[g_scope_write] =  SCOPE_VOLUME_MIN;
 
     g_scope_write = (g_scope_write + 1u) % SCOPE_SAMPLES;
 
