@@ -218,6 +218,8 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #define DUAL_VFO_SUB_FREQ_CHAR_W  7u
 /* A/B 行下方预留 1 像素再显示信道号 */
 #define DV_Y_TOP_CHID    (DV_Y_TOP_AB + DUAL_VFO_AB_TALL_H + 1u)
+/* Tx 偏提示：仅主信道；副信道不显示 */
+#define DV_TXOFS_GAP_L_MAIN 16u
 
 static void DualVfoXorHStripColumns(uint8_t x0, uint8_t yTop, uint8_t yBottom)
 {
@@ -464,6 +466,60 @@ static void DualVfoDrawChIdSmallest(unsigned int vfoIdx, uint8_t x, uint8_t y)
     GUI_DisplaySmallest(chId, x, y, false, true);
 }
 
+/* TxOffs：与菜单相同存贮，格式化为无末尾 0 的小数字符串（如 6.8、0.5） */
+static void DualVfoFmtTxOffsMHzTrim(char *out, size_t cap, uint32_t o)
+{
+    const unsigned hi = (unsigned)(o / 100000u);
+    const unsigned lo = (unsigned)(o % 100000u);
+    if (lo == 0u)
+    {
+        snprintf(out, cap, "%u", hi);
+        return;
+    }
+    char frac[8];
+    snprintf(frac, sizeof(frac), "%05u", lo);
+    size_t n = strlen(frac);
+    while (n > 1u && frac[n - 1u] == '0')
+        n--;
+    frac[n] = '\0';
+    snprintf(out, cap, "%u.%s", hi, frac);
+}
+
+/* 频率数字左侧空隙内水平居中：TxODir（+/-）与 TxOffs 之间留 1px；OFF 时不显示 */
+static void DualVfoDrawTxOffsetSmallCentered(unsigned int vfoIdx, uint8_t gapL, uint8_t xFreqStart, uint8_t y)
+{
+    const VFO_Info_t *v = &gEeprom.VfoInfo[vfoIdx];
+    unsigned          d = (unsigned)v->TX_OFFSET_FREQUENCY_DIRECTION % 3u;
+
+    if (d == TX_OFFSET_FREQUENCY_DIRECTION_OFF)
+        return;
+
+    if (xFreqStart <= gapL + 4u)
+        return;
+
+    char             num[16];
+    const uint32_t   o = v->TX_OFFSET_FREQUENCY;
+    DualVfoFmtTxOffsMHzTrim(num, sizeof(num), o);
+
+    const char *const dir   = gSubMenu_SFT_D[d];
+    const unsigned int numw = (unsigned int)strlen(num) * 4u;
+    /* 方向 1 字宽 4px + 1px 间隔 + 数值 */
+    const unsigned int totalw = 4u + 1u + numw;
+
+    const uint8_t      gapR = (uint8_t)(xFreqStart - 2u);
+    const unsigned int maxw = (unsigned int)(gapR - gapL + 1u);
+
+    if (totalw > maxw)
+        return;
+
+    const uint8_t x = (uint8_t)((unsigned int)gapL + (maxw - totalw) / 2u);
+    if ((unsigned int)x + totalw > LCD_WIDTH)
+        return;
+
+    GUI_DisplaySmallest(dir, x, y, false, true);
+    GUI_DisplaySmallest(num, (uint8_t)(x + 4u + 1u), y, false, true);
+}
+
 static void DualVfoDrawSubFreqSmallest(uint8_t y, uint32_t frequency, bool invertTail)
 {
     char fs[16];
@@ -475,7 +531,7 @@ static void DualVfoDrawSubFreqSmallest(uint8_t y, uint32_t frequency, bool inver
         DualVfoXorHStripColumns(x0, y, (uint8_t)(y + DUAL_VFO_SUB_FREQ_H - 1u));
 }
 
-static void DualVfoDrawMainFreq2x(uint32_t frequency, bool invertTail)
+static void DualVfoDrawMainFreq2x(unsigned int vfoIdx, uint32_t frequency, bool invertTail)
 {
     char fs[16];
     sprintf(fs, "%3u.%05u", (unsigned)(frequency / 100000u), (unsigned)(frequency % 100000u));
@@ -483,6 +539,7 @@ static void DualVfoDrawMainFreq2x(uint32_t frequency, bool invertTail)
     uint8_t            x0 = (w < LCD_WIDTH - 4u) ? (uint8_t)(LCD_WIDTH - 2u - w) : 2u;
     if (x0 < 44u)
         x0 = 44u;
+    DualVfoDrawTxOffsetSmallCentered(vfoIdx, DV_TXOFS_GAP_L_MAIN, x0, (uint8_t)(DV_Y_TOP_CH + 3u));
     DualVfoDrawString2x(x0, DV_Y_TOP_CH, fs);
     if (invertTail)
         DualVfoXorHStripColumns(x0, DV_Y_TOP_CH, (uint8_t)(DV_Y_TOP_CH + 11u));
@@ -560,7 +617,7 @@ static void DualVfoDrawTopChannel(unsigned int vfoIdx)
         uint32_t   frequency = gEeprom.VfoInfo[vfoIdx].pRX->Frequency;
         if (txHere)
             frequency = gEeprom.VfoInfo[vfoIdx].pTX->Frequency;
-        DualVfoDrawMainFreq2x(frequency, rxHere || txHere);
+        DualVfoDrawMainFreq2x(vfoIdx, frequency, rxHere || txHere);
     }
 
     DualVfoDrawTopDetailRowPx(vfoIdx, DV_Y_TOP_DET);
@@ -587,13 +644,15 @@ static void DualVfoDrawBottomChannel(unsigned int vfoIdx)
 
     DualVfoDrawAbRxTxOnlyPx(vfoIdx, DV_Y_BOT_MAIN, activeTxVFO, false, false, DUAL_VFO_AB_BOT_W,
                             DUAL_VFO_AB_BOT_H, DV_Y_BOT_BESIDE_AB);
+
+    const bool rxHere =
+        (bool)(FUNCTION_IsRx() && gEeprom.RX_VFO == vfoIdx && VfoState[vfoIdx] == VFO_STATE_NORMAL);
+    const bool txHere =
+        (bool)(gCurrentFunction == FUNCTION_TRANSMIT && activeTxVFO == vfoIdx);
+
     /* 框右缘 innerR=1+abW-1 后留 2px 再画信道号；接收只画 RX、不画信道号 */
     {
-        char       chId[14];
-        const bool rxHere =
-            (bool)(FUNCTION_IsRx() && gEeprom.RX_VFO == vfoIdx && VfoState[vfoIdx] == VFO_STATE_NORMAL);
-        const bool txHere =
-            (bool)(gCurrentFunction == FUNCTION_TRANSMIT && activeTxVFO == vfoIdx);
+        char            chId[14];
         const uint8_t besideX0 = (uint8_t)(1u + DUAL_VFO_AB_BOT_W + 2u); /* innerR + 1 + 2px 间隔 */
         if (rxHere)
             GUI_DisplaySmallest("RX", besideX0, DV_Y_BOT_BESIDE_AB, false, true);
@@ -608,11 +667,7 @@ static void DualVfoDrawBottomChannel(unsigned int vfoIdx)
     }
 
     {
-        const bool rxHere =
-            (bool)(FUNCTION_IsRx() && gEeprom.RX_VFO == vfoIdx && VfoState[vfoIdx] == VFO_STATE_NORMAL);
-        const bool txHere =
-            (bool)(gCurrentFunction == FUNCTION_TRANSMIT && activeTxVFO == vfoIdx);
-        uint32_t   frequency = gEeprom.VfoInfo[vfoIdx].pRX->Frequency;
+        uint32_t frequency = gEeprom.VfoInfo[vfoIdx].pRX->Frequency;
         if (txHere)
             frequency = gEeprom.VfoInfo[vfoIdx].pTX->Frequency;
         DualVfoDrawSubFreqSmallest(DV_Y_BOT_FREQ_LINE, frequency, rxHere || txHere);

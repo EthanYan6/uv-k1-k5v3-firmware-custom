@@ -70,7 +70,7 @@
                 "ENABLE_UART_RW_BK_REGS": false,
                 "ENABLE_SWD": false,
                 "VERSION_STRING_1": "v5.2.0",
-                "VERSION_STRING_2": "v2.0.1"
+                "VERSION_STRING_2": "v2.0.2"
             }
         },
         {
