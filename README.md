@@ -1,6 +1,6 @@
-# F4HWN-R7
+# Stats
 
-> firmware port for the UV-K1 and UV-K5 V3 using the PY32F071 MCU
+![Alt](https://repobeats.axiom.co/api/embed/ecdd86aa536b716f088339a0c5ee734558f78c28.svg "Repobeats analytics image")
 
 # F4HWN firmware port for the UV-K1 and UV-K5 V3 using the PY32F071 MCU
 
