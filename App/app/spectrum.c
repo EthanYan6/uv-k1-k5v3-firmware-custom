@@ -270,16 +270,6 @@ static void GUI_DisplaySmallest(const char *pString, uint8_t x, uint8_t y,
 
 // Utility functions
 
-static KEY_Code_t GetKey()
-{
-    KEY_Code_t btn = KEYBOARD_Poll();
-    if (btn == KEY_INVALID && GPIO_IsPttPressed())
-    {
-        btn = KEY_PTT;
-    }
-    return btn;
-}
-
 static int clamp(int v, int min, int max)
 {
     return v <= min ? min : (v >= max ? max : v);
@@ -787,11 +777,13 @@ static void ToggleBacklight()
     settings.backlightState = !settings.backlightState;
     if (settings.backlightState)
     {
-        BACKLIGHT_TurnOn();
+        // BACKLIGHT_TurnOn();
+        BACKLIGHT_SetBrightness(gEeprom.BACKLIGHT_MAX);
     }
     else
     {
-        BACKLIGHT_TurnOff();
+        // BACKLIGHT_TurnOff();
+        BACKLIGHT_SetBrightness(gEeprom.BACKLIGHT_MIN);
     }
 }
 
@@ -1185,37 +1177,32 @@ static void DrawArrow(uint8_t x)
 
 static void OnKeyDown(uint8_t key)
 {
-    bool nav = (gEeprom.SET_NAV != 0);
+    bool nav = gEeprom.SET_NAV;
+    bool isTrue = false;
 
     switch (key)
     {
     case KEY_3:
-        UpdateDBMax(true);
-        break;
+        isTrue = true;
+        [[fallthrough]];
     case KEY_9:
-        UpdateDBMax(false);
+        UpdateDBMax(isTrue);
         break;
     case KEY_1:
-        UpdateScanStep(true);
-        break;
+        isTrue = true;
+        [[fallthrough]];
     case KEY_7:
-        UpdateScanStep(false);
+        UpdateScanStep(isTrue);
         break;
     case KEY_2:
-        UpdateFreqChangeStep(true);
-        break;
+        isTrue = true;
+        [[fallthrough]];
     case KEY_8:
-        UpdateFreqChangeStep(false);
+        UpdateFreqChangeStep(isTrue);
         break;
     case KEY_UP:
-#ifdef ENABLE_SCAN_RANGES
-        if (!gScanRangeStart) {
-#endif
-        UpdateCurrentFreq(nav);
-#ifdef ENABLE_SCAN_RANGES
-        }
-#endif
-        break;
+        nav = !nav;
+        [[fallthrough]];
     case KEY_DOWN:
 #ifdef ENABLE_SCAN_RANGES
         if (!gScanRangeStart) {
@@ -1229,10 +1216,10 @@ static void OnKeyDown(uint8_t key)
         Blacklist();
         break;
     case KEY_STAR:
-        UpdateRssiTriggerLevel(true);
-        break;
+        isTrue = true;
+        [[fallthrough]];
     case KEY_F:
-        UpdateRssiTriggerLevel(false);
+        UpdateRssiTriggerLevel(isTrue);
         break;
     case KEY_5:
 #ifdef ENABLE_SCAN_RANGES
@@ -1285,21 +1272,10 @@ static void OnKeyDownFreqInput(uint8_t key)
 {
     switch (key)
     {
-    case KEY_0:
-    case KEY_1:
-    case KEY_2:
-    case KEY_3:
-    case KEY_4:
-    case KEY_5:
-    case KEY_6:
-    case KEY_7:
-    case KEY_8:
-    case KEY_9:
+    case KEY_0...KEY_9:
     case KEY_STAR:
-        UpdateFreqInput(key);
-        break;
     case KEY_EXIT:
-        if (freqInputIndex == 0)
+        if (freqInputIndex == 0 && key == KEY_EXIT)
         {
             SetState(previousState);
             break;
@@ -1330,23 +1306,20 @@ static void OnKeyDownFreqInput(uint8_t key)
 
 void OnKeyDownStill(KEY_Code_t key)
 {
-    bool nav = (gEeprom.SET_NAV != 0);
+    bool nav = gEeprom.SET_NAV;
+    bool isTrue = false;
 
     switch (key)
     {
     case KEY_3:
-        UpdateDBMax(true);
-        break;
+        isTrue = true;
+        [[fallthrough]];
     case KEY_9:
-        UpdateDBMax(false);
+        UpdateDBMax(isTrue);
         break;
     case KEY_UP:
-        if (menuState) {
-            SetRegMenuValue(menuState, nav);
-            break;
-        }
-        UpdateCurrentFreqStill(nav);
-        break;
+        nav = !nav;
+        [[fallthrough]];
     case KEY_DOWN:
         if (menuState) {
             SetRegMenuValue(menuState, !nav);
@@ -1355,10 +1328,10 @@ void OnKeyDownStill(KEY_Code_t key)
         UpdateCurrentFreqStill(!nav);
         break;
     case KEY_STAR:
-        UpdateRssiTriggerLevel(true);
-        break;
+        isTrue = true;
+        [[fallthrough]];
     case KEY_F:
-        UpdateRssiTriggerLevel(false);
+        UpdateRssiTriggerLevel(isTrue);
         break;
     case KEY_5:
         FreqInput();
@@ -1381,14 +1354,7 @@ void OnKeyDownStill(KEY_Code_t key)
         BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true); */
         break;
     case KEY_MENU:
-        if (menuState == ARRAY_SIZE(registerSpecs) - 1)
-        {
-            menuState = 1;
-        }
-        else
-        {
-            menuState++;
-        }
+        menuState = (menuState == ARRAY_SIZE(registerSpecs) - 1) ? 1 : menuState + 1;
         redrawScreen = true;
         break;
     case KEY_EXIT:
@@ -1541,7 +1507,7 @@ static void Render()
 static bool HandleUserInput()
 {
     kbd.prev = kbd.current;
-    kbd.current = GetKey();
+    kbd.current = KEYBOARD_GetKey();
 
     if (kbd.current != KEY_INVALID && kbd.current == kbd.prev)
     {
@@ -1691,16 +1657,23 @@ static void UpdateListening()
 
 static void Tick()
 {
-#ifdef ENABLE_AM_FIX
+#ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
+    // Parse incoming packets on every tick so serial keys are never missed,
+    // regardless of whether the screen needs redrawing.
+    SCREENSHOT_ParseInput();
+#endif
+
     if (gNextTimeslice)
     {
         gNextTimeslice = false;
+#ifdef ENABLE_AM_FIX
         if (settings.modulationType == MODULATION_AM && !lockAGC)
         {
             AM_fix_10ms(vfo); // allow AM_Fix to apply its AGC action
         }
-    }
 #endif
+        BACKLIGHT_Update();
+    }
 
 #ifdef ENABLE_SCAN_RANGES
     if (gNextTimeslice_500ms)
@@ -1760,7 +1733,7 @@ static void Tick()
         Render();
         // For screenshot
         #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
-            getScreenShot(false);
+            SCREENSHOT_Update(false);
         #endif
         redrawScreen = false;
     }
@@ -1768,6 +1741,8 @@ static void Tick()
 
 void APP_RunSpectrum()
 {
+    settings.backlightState = gEeprom.BACKLIGHT_TIME == 0 ? false : true;
+
     // TX here coz it always? set to active VFO
     vfo = gEeprom.TX_VFO;
 #ifdef ENABLE_FEAT_F4HWN_SPECTRUM
@@ -1830,4 +1805,6 @@ void APP_RunSpectrum()
     {
         Tick();
     }
+
+    BACKLIGHT_TurnOn();
 }

@@ -101,31 +101,37 @@ void UI_DisplayStatus()
                 {
                     if(gEeprom.SCAN_LIST_ENABLED==1) {
                         sprintf(str, "%s+", "ALL");
-                        end = 19;
+                        end = 18;
                     }
                     else
                     {
                         sprintf(str, "%s", "ALL");
-                        end = 15;
+                        end = 14;
                     }
                 }
                 else
                 {
-                    if(gEeprom.SCAN_LIST_ENABLED==1) {
-                        sprintf(str, "%02d+", gEeprom.SCAN_LIST_DEFAULT);
-                        end = 15;
-                    }
+                    const char *name = gListName[gEeprom.SCAN_LIST_DEFAULT - 1];
+
+                    // Check if name is valid
+                    if (!IsEmptyName(name, sizeof(gListName[0]))) {
+                        sprintf(str, "%.3s%s", name, gEeprom.SCAN_LIST_ENABLED ? "+" : "");
+                        end = gEeprom.SCAN_LIST_ENABLED ? 18 : 14;
+                    } 
                     else {
-                        sprintf(str, "%02d", gEeprom.SCAN_LIST_DEFAULT);
-                        end = 11;
+                        sprintf(str, "%02d%s", gEeprom.SCAN_LIST_DEFAULT, gEeprom.SCAN_LIST_ENABLED ? "+" : "");
+                        end = gEeprom.SCAN_LIST_ENABLED ? 14 : 10;
                     }
                 }
 
                 GUI_DisplaySmallest(str, 2, 1, true, true);
-                for (uint8_t x = 0; x < end; x++)
+
+                gStatusLine[0] ^= 0x3E;
+                for (uint8_t x = 1; x < end; x++)
                 {
                     gStatusLine[x] ^= 0x7F;
                 }
+                gStatusLine[end] ^= 0x3E;
             }
             else {  // frequency mode
                 memcpy(line + x + 1, gFontS, sizeof(gFontS));
@@ -167,31 +173,32 @@ void UI_DisplayStatus()
             else
         #endif
             {
-                #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
-                if(gEeprom.MENU_LOCK == true) {
-                    memcpy(line + x + 2, gFontRO, sizeof(gFontRO));
-                }
-                else
-                {
-                #endif
-                    uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
-                    if(dw == 1 || dw == 3) { // DWR - dual watch + respond
-                        if(gDualWatchActive)
-                            memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
-                        else
-                            memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
-                    }
-                    else if(dw == 2) { // XB - crossband
-                        memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
+                if(!gAirCopyBootMode) {
+                    #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+                    if(gEeprom.MENU_LOCK == true) {
+                        memcpy(line + x + 2, gFontRO, sizeof(gFontRO));
                     }
                     else
                     {
-                        if(!gAirCopyBootMode)
+                    #endif
+                        uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
+                        if(dw == 1 || dw == 3) { // DWR - dual watch + respond
+                            if(gDualWatchActive)
+                                memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
+                            else
+                                memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
+                        }
+                        else if(dw == 2) { // XB - crossband
+                            memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
+                        }
+                        else
+                        {
                             memcpy(line + x + 2, gFontMO, sizeof(gFontMO));
+                        }
+                    #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
                     }
-                #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+                    #endif
                 }
-                #endif
             }
         }
         x += sizeof(gFontDWR) + 3;
@@ -233,15 +240,8 @@ void UI_DisplayStatus()
         size = sizeof(gFontKeyLock);
     }
     else if (gWasFKeyPressed) {
-        #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
-        if (!gEeprom.MENU_LOCK) {
-            src = gFontF;
-            size = sizeof(gFontF);
-        }
-        #else
         src = gFontF;
         size = sizeof(gFontF);
-        #endif
     }
     #ifdef ENABLE_FEAT_F4HWN
         else if (gMute) {

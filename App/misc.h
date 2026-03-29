@@ -148,7 +148,7 @@ extern const uint16_t        scan_pause_delay_in_7_10ms;
 //extern const uint16_t        gMax_bat_v;
 //extern const uint16_t        gMin_bat_v;
 
-extern const uint8_t         gMicGain_dB2[5];
+extern const uint8_t         gMicGain_dB2[9];
 
 #ifndef ENABLE_FEAT_F4HWN
 extern bool                  gSetting_350TX;
@@ -197,7 +197,7 @@ extern enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
     extern bool               gSetting_set_tmr;
     extern bool               gSetting_set_ptt_session;
     #ifdef ENABLE_FEAT_F4HWN_DEBUG
-        extern uint16_t            gDebug;
+        extern int16_t        gDebug;
     #endif
     extern uint8_t            gDW;
     extern uint8_t            gCB;
@@ -211,6 +211,7 @@ extern enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
         extern bool               gPowerHigh;
         extern bool               gRemoveOffset;
     #endif
+    extern int8_t dBmCorrTable[7];
 #endif
 
 #ifdef ENABLE_AUDIO_BAR
@@ -322,6 +323,8 @@ extern volatile bool         gTxTimeoutReached;
     #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
         extern volatile uint8_t  gUART_LockScreenshot; // lock screenshot if Chirp is used
         extern bool gUSB_ScreenshotEnabled;
+
+        bool SCREENSHOT_IsLocked(void);
     #endif
 #endif
 
@@ -365,12 +368,14 @@ extern AlarmState_t          gAlarmState;
 extern uint16_t              gMenuCountdown;
 extern bool                  gPttWasReleased;
 extern bool                  gPttWasPressed;
+extern bool                  gHasVfoBackup;
 extern bool                  gFlagReconfigureVfos;
 extern uint8_t               gVfoConfigureMode;
 extern bool                  gFlagResetVfos;
 extern bool                  gRequestSaveVFO;
 extern uint16_t              gRequestSaveChannel;
 extern bool                  gRequestSaveSettings;
+extern bool                  gRequestSaveSquelch;
 #ifdef ENABLE_FMRADIO
     extern bool              gRequestSaveFM;
 #endif
@@ -455,6 +460,8 @@ extern volatile uint8_t      boot_counter_10ms;
     extern uint16_t gVfoSaveCountdown_10ms;
     extern bool gScheduleVfoSave;
     extern bool gVfoStateChanged;
+
+    extern char gListName[MR_CHANNELS_LIST][4];
 #endif
 
 int32_t NUMBER_AddWithWraparound(int32_t Base, int32_t Add, int32_t LowerLimit, int32_t UpperLimit);

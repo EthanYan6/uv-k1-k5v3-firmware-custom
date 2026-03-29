@@ -22,6 +22,7 @@
 #include "ui/helper.h"
 #include "ui/inputbox.h"
 #include "misc.h"
+#include "settings.h"
 
 
 void UI_GenerateChannelString(char *pString, const uint16_t Channel)
@@ -44,23 +45,23 @@ void UI_GenerateChannelString(char *pString, const uint16_t Channel)
 void UI_GenerateChannelStringEx(char *pString, const bool bShowPrefix, const uint16_t ChannelNumber)
 {
     if (gInputBoxIndex > 0) {
-        for (unsigned int i = 0; i < 3; i++) {
+        for (unsigned int i = 0; i < 4; i++) {
             pString[i] = (gInputBox[i] == 10) ? '-' : gInputBox[i] + '0';
         }
 
-        pString[3] = 0;
+        pString[4] = 0;
         return;
     }
 
     if (bShowPrefix) {
         // BUG here? Prefixed NULLs are allowed
-        sprintf(pString, "CH-%03u", ChannelNumber + 1);
+        sprintf(pString, "CH-%04u", ChannelNumber + 1);
     } else if (ChannelNumber == MR_CHANNEL_LAST + 1) {
         strcpy(pString, "None");
     } else if (ChannelNumber == 0xFFFF) {
         strcpy(pString, "NULL");
     } else {
-        sprintf(pString, "%03u", ChannelNumber + 1);
+        sprintf(pString, "%04u", ChannelNumber + 1);
     }
 }
 
@@ -130,17 +131,17 @@ void UI_PrintStringSmallNormalInverse(const char *pString, uint8_t Start, uint8_
     if (End != 0 && x_end > End)
         x_end = End;
 
-    gFrameBuffer[Line][x_start - 3] ^= 0x3E;
-    gFrameBuffer[Line][x_start - 2] ^= 0x7F;
-    gFrameBuffer[Line][x_start - 1] ^= 0xFF;
+    //gFrameBuffer[Line][x_start - 2] ^= 0x3E;
+    gFrameBuffer[Line][x_start - 1] ^= 0x7F;
+    //gFrameBuffer[Line][x_start - 1] ^= 0xFF;
     for (uint8_t x = x_start; x < x_end; x++)
     {
         gFrameBuffer[Line][x] ^= 0xFF;
         gFrameBuffer[Line - 1][x] ^= 0x80;
     }
-    gFrameBuffer[Line][x_end + 0] ^= 0xFF;
-    gFrameBuffer[Line][x_end + 1] ^= 0x7F;
-    gFrameBuffer[Line][x_end + 2] ^= 0x3E;
+    //gFrameBuffer[Line][x_end + 0] ^= 0xFF;
+    gFrameBuffer[Line][x_end + 0] ^= 0x7F;
+    //gFrameBuffer[Line][x_end + 1] ^= 0x3E;
 }
 
 
@@ -156,30 +157,6 @@ void UI_PrintStringSmallBold(const char *pString, uint8_t Start, uint8_t End, ui
 
     UI_PrintStringSmall(pString, Start, End, Line, char_width, font);
 }
-
-void UI_PrintStringSmallBoldInverse(const char *pString, uint8_t Start, uint8_t End, uint8_t Line)
-{
-    // First draw the string normally
-    UI_PrintStringSmallBold(pString, Start, End, Line);
-
-    // Now invert the framebuffer bits for the rendered area
-    uint8_t len = strlen(pString);
-    uint8_t char_width = 7; // small font is typically 6px wide
-
-    uint8_t x_start = Start;
-    uint8_t x_end   = Start + (len * char_width);
-
-    if (End != 0 && x_end > End)
-        x_end = End;
-
-    gFrameBuffer[Line][x_start] ^= 0x7F;
-    for (uint8_t x = x_start + 1; x < x_end; x++)
-    {
-        gFrameBuffer[Line][x] ^= 0x41;
-    }
-    gFrameBuffer[Line][x_end + 1] ^= 0x7F;
-}
-
 
 void UI_PrintStringSmallBufferNormal(const char *pString, uint8_t * buffer)
 {
@@ -344,6 +321,33 @@ static void sort(int16_t *a, int16_t *b)
         }
         x += 4;
       }
+    }
+
+    void UI_DisplayUnlockKeyboard(uint8_t shift) {
+        if (gEeprom.KEY_LOCK && gKeypadLocked > 0)
+        {   // tell user how to unlock the keyboard
+            
+            //memcpy(gFrameBuffer[shift] + 2, gFontKeyLock, sizeof(gFontKeyLock));
+            UI_PrintStringSmallBold("UNLOCK KEYBOARD", 12, 0, shift);
+            //memcpy(gFrameBuffer[shift] + 120, gFontKeyLock, sizeof(gFontKeyLock));
+
+            /*
+            for (uint8_t i = 12; i < 116; i++)
+            {
+                gFrameBuffer[shift][i] ^= 0xFF;
+            }
+            */
+        }
+    }
+
+    bool IsEmptyName(const char *name, uint8_t len) {
+        if (name[0] == '\0' || name[0] == '\xff')
+            return true;
+        for (uint8_t i = 0; i < len; i++) {
+            if (name[i] != ' ' && name[i] != '\xff' && name[i] != '\0')
+                return false;
+        }
+        return true;
     }
 #endif
     
