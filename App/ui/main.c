@@ -934,19 +934,13 @@ static void DrawSmallPowerBars(uint8_t *p, unsigned int level)
     if(level>6)
         level = 6;
 
-    if(gSetting_set_gui)
-    {
-        for(uint8_t i = 0; i <= level; i++) {
-            char bar = (0xff << (6-i)) & 0x7F;
-            memset(p + 2 + i*3, bar, 2);
+    char bar = 0b00111110;
+
+    for(uint8_t i = 0; i <= level; i++) {
+        if(gSetting_set_gui) {
+            bar = (0xff << (6-i)) & 0x7F;
         }
-    }
-    else
-    {
-        for(uint8_t i = 0; i <= level; i++) {
-            char bar = 0b00111110;
-            memset(p + 2 + i*3, bar, 2);
-        }
+        memset(p + 2 + i*3, bar, 2);
     }
 }
 #if defined ENABLE_AUDIO_BAR || defined ENABLE_RSSI_BAR
@@ -1021,15 +1015,17 @@ static void DrawLevelBar(uint8_t xpos, uint8_t line, uint8_t level, uint8_t bars
 #endif
 
 #ifdef ENABLE_AUDIO_BAR
-
 // Approximation of a logarithmic scale using integer arithmetic
-uint8_t log2_approx(unsigned int value) {
+static uint8_t log2_approx(unsigned int value) {
     uint8_t log = 0;
     while (value >>= 1) {
         log++;
     }
     return log;
 }
+#endif
+
+#ifdef ENABLE_AUDIO_BAR
 
 void UI_DisplayAudioBar(void)
 {
@@ -1093,6 +1089,135 @@ void UI_DisplayAudioBar(void)
     }
 }
 #endif
+
+#ifdef ENABLE_FEAT_F4HWN_AUDIO_SCOPE
+
+#define SCOPE_SAMPLES        43   // number of columns (43 × 3px = 128px wide)
+#define SCOPE_NOISE_GATE     50u  // minimum range below which the display shows baseline
+#define SCOPE_FLOOR_RISE     2u   // floor rise per frame (+100 units/s at 20ms/frame)
+#define SCOPE_FLOOR_DROP_SHR 3u   // floor drop IIR shift: drop by (floor-min) >> N per frame (~160ms to halve)
+#define SCOPE_VOLUME_MIN     200u // let's assume that the sound level in silence is 200
+
+void UI_DisplayAudioScope(void)
+{
+    static uint16_t g_scope_buf[SCOPE_SAMPLES];
+    static uint8_t  g_scope_write      = 0;
+    static uint16_t g_scope_floor      = SCOPE_VOLUME_MIN;     // persistent floor: snaps down fast, rises slowly
+    static uint8_t  g_scope_ready      = 0;                    // number of valid samples since TX entry
+
+    // REG_64 (VoiceAmplitudeOut) is only meaningful in TX (mic input).
+    // FM RX audio is frequency-encoded — no register gives the instantaneous waveform.
+
+// ------------------------------ Sample audio amplitude ------------------------------
+
+    static bool s_was_tx = false;
+
+    if (gCurrentFunction != FUNCTION_TRANSMIT) {
+        s_was_tx = false;
+        return;
+    }
+
+    // This prevents a sudden spike on the bar caused by release the PTT button
+    if (!GPIO_IsPttPressed()
+#ifdef ENABLE_VOX
+    && !gEeprom.VOX_SWITCH
+#endif
+#ifdef ENABLE_FEAT_F4HWN
+    && !gSetting_set_ptt_session
+#endif
+    )
+    return;
+
+    if (!s_was_tx) {
+        // TX entry: full reset so every new transmission starts from a clean state
+        for (uint8_t i = 0; i < SCOPE_SAMPLES; i++) g_scope_buf[i] = SCOPE_VOLUME_MIN;
+        g_scope_write      = 0u;
+        g_scope_floor      = SCOPE_VOLUME_MIN;
+        s_was_tx           = true;
+    }
+
+    // The first 7 bars after turning on the radio
+    // will not display any values: they cause high bars.
+    if (g_scope_ready >= 7)
+        g_scope_buf[g_scope_write] = BK4819_GetVoiceAmplitudeOut();
+    else
+        g_scope_ready++;
+        
+    // If the reading is 0, it is definitely an incorrect value
+    // caused by the microphone being muted - set it to 200.
+    if (g_scope_buf[g_scope_write] == 0) 
+        g_scope_buf[g_scope_write] =  SCOPE_VOLUME_MIN;
+
+    g_scope_write = (g_scope_write + 1u) % SCOPE_SAMPLES;
+
+// --------------------------------- Refresh display ---------------------------------
+
+    if (gLowBattery && !gLowBatteryConfirmed)
+        return;
+
+    if (gScreenToDisplay != DISPLAY_MAIN
+#ifdef ENABLE_DTMF_CALLING
+        || gDTMF_CallState != DTMF_CALL_STATE_NONE
+#endif
+        )
+        return;
+
+#if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
+    if (gAlarmState != ALARM_STATE_OFF)
+        return;
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN
+    RxBlinkLed = 0;
+    RxBlinkLedCounter = 0;
+    BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
+    const unsigned int line = isMainOnly() ? 5 : 3;
+#else
+    const unsigned int line = 3;
+#endif
+
+    uint8_t *p_line = gFrameBuffer[line];
+    memset(p_line, 0, LCD_WIDTH);
+
+    // Find min and max across current buffer
+    uint16_t min_val = g_scope_buf[0];
+    uint16_t max_val = g_scope_buf[0];
+    for (uint8_t i = 1u; i < SCOPE_SAMPLES; i++) {
+        if (g_scope_buf[i] < min_val) min_val = g_scope_buf[i];
+        if (g_scope_buf[i] > max_val) max_val = g_scope_buf[i];
+    }
+
+    // Floor tracks buffer minimum with asymmetric IIR:
+    // - drops toward min smoothly (SCOPE_FLOOR_DROP_SHR), avoiding instant-snap ghost
+    // - rises slowly (SCOPE_FLOOR_RISE/frame) to handle loud constant voice
+    if (g_scope_floor > min_val)
+        g_scope_floor -= ((g_scope_floor - min_val) >> SCOPE_FLOOR_DROP_SHR) + 1u;
+    else
+        g_scope_floor += SCOPE_FLOOR_RISE;
+
+    const uint16_t range = (max_val > g_scope_floor) ? (max_val - g_scope_floor) : 0u;
+
+    for (uint8_t i = 0u; i < SCOPE_SAMPLES; i++) {
+        const uint8_t  idx    = (g_scope_write + i) % SCOPE_SAMPLES;
+        uint8_t        height = 0u;
+        if (range >= SCOPE_NOISE_GATE) {
+            const uint16_t v = (g_scope_buf[idx] > g_scope_floor) ? (g_scope_buf[idx] - g_scope_floor) : 0u;
+            height = (uint8_t)((uint32_t)v * 7u / range);
+        }
+        // Filled column using bits 6..0 only (bit 7 always off to avoid overlap with text below)
+        // At silence (height 0): single pixel at bit 6 (baseline)
+        const uint8_t mask = (height > 0u) ? (uint8_t)((0x7Fu << (7u - height)) & 0x7Fu) : 0x40u;
+        // 2px column + 1px gap per sample
+
+        uint8_t *p_col = &p_line[i * 3u];
+        p_col[0] = mask;
+        p_col[1] = mask;
+
+    }
+
+    ST7565_BlitLine(line);
+}
+#endif  // ENABLE_FEAT_F4HWN_AUDIO_SCOPE
 
 void DisplayRSSIBar(const bool now)
 {
@@ -1454,32 +1579,7 @@ void UI_DisplayMain(void)
         return;
     }
 #else
-    if (gEeprom.KEY_LOCK && gKeypadLocked > 0)
-    {   // tell user how to unlock the keyboard
-        uint8_t shift = 3;
-
-        /*
-        BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
-        SYSTEM_DelayMs(50);
-        BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
-        SYSTEM_DelayMs(50);
-        */
-
-        if(isMainOnly())
-        {
-            shift = 5;
-        }
-        //memcpy(gFrameBuffer[shift] + 2, gFontKeyLock, sizeof(gFontKeyLock));
-        UI_PrintStringSmallBold("UNLOCK KEYBOARD", 12, 0, shift);
-        //memcpy(gFrameBuffer[shift] + 120, gFontKeyLock, sizeof(gFontKeyLock));
-
-        /*
-        for (uint8_t i = 12; i < 116; i++)
-        {
-            gFrameBuffer[shift][i] ^= 0xFF;
-        }
-        */
-    }
+    UI_DisplayUnlockKeyboard(isMainOnly() ? 5 : 3);
 #endif
 
 #ifdef ENABLE_FEAT_F4HWN
@@ -2069,7 +2169,7 @@ void UI_DisplayMain(void)
                         const char *name = gListName[countList - 1];
                         
                         // If name is empty/invalid, display number
-                        if (name[0] == '\0' || name[0] == '\xff' || name[0] == ' ') {
+                        if (IsEmptyName(name, sizeof(gListName[0]))) {
                             sprintf(String, "%02d", countList);
                             xStart = 117;  // 2-digit number aligned right
                             xDisplay = 119;
@@ -2100,9 +2200,11 @@ void UI_DisplayMain(void)
                     
                     GUI_DisplaySmallest(displayStr, xDisplay, line == 0 ? 1 : 33, false, true);
 
-                    for (uint8_t x = xStart; x < 128; x++) {
+                    gFrameBuffer[line][xStart] ^= 0x3E;
+                    for (uint8_t x = xStart + 1; x < 127; x++) {
                         gFrameBuffer[line][x] ^= 0x7F;
                     }
+                    gFrameBuffer[line][127] ^= 0x3E;
                 }
 
                 #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
@@ -2267,9 +2369,15 @@ void UI_DisplayMain(void)
                     Level = 2;
                 }
                 */
-                Level = gRxVfo->OUTPUT_POWER - 1;
+
+                uint8_t currentPower = gRxVfo->OUTPUT_POWER;
+
+                if(currentPower == OUTPUT_POWER_USER)
+                    Level = gSetting_set_pwr;
+                else
+                    Level = currentPower - 1;
             }
-            else
+            else 
             if (mode == VFO_MODE_RX)
             {   // RX signal level
                 #ifndef ENABLE_RSSI_BAR
@@ -2595,6 +2703,14 @@ display_main_after_vfo_loop:
 
         const bool rx = FUNCTION_IsRx();
 
+#ifdef ENABLE_FEAT_F4HWN_AUDIO_SCOPE
+        if (gSetting_mic_bar && gCurrentFunction == FUNCTION_TRANSMIT) {
+            // Reserve the line so no other element overwrites it.
+            // Actual drawing is handled exclusively by the app.c timeslice.
+            center_line = CENTER_LINE_AUDIO_SCOPE;
+        }
+        else
+#endif
 #ifdef ENABLE_AUDIO_BAR
         if (gSetting_mic_bar && gCurrentFunction == FUNCTION_TRANSMIT) {
 #ifdef ENABLE_FEAT_F4HWN
@@ -2651,7 +2767,7 @@ display_main_after_vfo_loop:
         if (rx || gCurrentFunction == FUNCTION_FOREGROUND || gCurrentFunction == FUNCTION_POWER_SAVE)
         {
             #if 1
-                if (gSetting_live_DTMF_decoder && gDTMF_RX_live[0] != 0)
+                if (gSetting_live_DTMF_decoder && gDTMF_RX_live[0] != 0 && gKeypadLocked == 0)
                 {   // show live DTMF decode
                     const unsigned int len = strlen(gDTMF_RX_live);
                     const unsigned int idx = (len > (17 - 5)) ? len - (17 - 5) : 0;  // limit to last 'n' chars

@@ -53,6 +53,8 @@ void UI_DrawPixelBuffer(uint8_t (*buffer)[128], uint8_t x, uint8_t y, bool black
     void PutPixelStatus(uint8_t x, uint8_t y, bool fill);
     void GUI_DisplaySmallest(const char *pString, uint8_t x, uint8_t y, bool statusbar, bool fill);
     void GUI_DisplaySmallestNegative(const char *pString, uint8_t x, uint8_t y);
+    void UI_DisplayUnlockKeyboard(uint8_t shift);
+    bool IsEmptyName(const char *name, uint8_t len);
 #endif
 void UI_DrawLineBuffer(uint8_t (*buffer)[128], int16_t x1, int16_t y1, int16_t x2, int16_t y2, bool black);
 void UI_DrawRectangleBuffer(uint8_t (*buffer)[128], int16_t x1, int16_t y1, int16_t x2, int16_t y2, bool black);

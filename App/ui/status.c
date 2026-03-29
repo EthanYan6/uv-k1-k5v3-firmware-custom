@@ -212,10 +212,7 @@ void UI_DisplayStatus()
                     const char *name = gListName[gEeprom.SCAN_LIST_DEFAULT - 1];
 
                     // Check if name is valid
-                    bool nameValid = (name[0] != '\0' && name[0] != '\xff' && name[0] != ' ');
-
-                    // Format the string
-                    if (nameValid) {
+                    if (!IsEmptyName(name, sizeof(gListName[0]))) {
                         sprintf(str, "%.3s%s", name, gEeprom.SCAN_LIST_ENABLED ? "+" : "");
                         end = gEeprom.SCAN_LIST_ENABLED ? 18 : 14;
                     } 
@@ -274,31 +271,32 @@ void UI_DisplayStatus()
             else
         #endif
             {
-                #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
-                if(gEeprom.MENU_LOCK == true) {
-                    memcpy(line + x + 2, gFontRO, sizeof(gFontRO));
-                }
-                else
-                {
-                #endif
-                    uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
-                    if(dw == 1 || dw == 3) { // DWR - dual watch + respond
-                        if(gDualWatchActive)
-                            memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
-                        else
-                            memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
-                    }
-                    else if(dw == 2) { // XB - crossband
-                        memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
+                if(!gAirCopyBootMode) {
+                    #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+                    if(gEeprom.MENU_LOCK == true) {
+                        memcpy(line + x + 2, gFontRO, sizeof(gFontRO));
                     }
                     else
                     {
-                        if(!gAirCopyBootMode)
+                    #endif
+                        uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
+                        if(dw == 1 || dw == 3) { // DWR - dual watch + respond
+                            if(gDualWatchActive)
+                                memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
+                            else
+                                memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
+                        }
+                        else if(dw == 2) { // XB - crossband
+                            memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
+                        }
+                        else
+                        {
                             memcpy(line + x + 2, gFontMO, sizeof(gFontMO));
+                        }
+                    #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
                     }
-                #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+                    #endif
                 }
-                #endif
             }
         }
         x += sizeof(gFontDWR) + 3;
@@ -340,15 +338,8 @@ void UI_DisplayStatus()
         size = sizeof(gFontKeyLock);
     }
     else if (gWasFKeyPressed) {
-        #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
-        if (!gEeprom.MENU_LOCK) {
-            src = gFontF;
-            size = sizeof(gFontF);
-        }
-        #else
         src = gFontF;
         size = sizeof(gFontF);
-        #endif
     }
     #ifdef ENABLE_FEAT_F4HWN
         else if (gMute) {

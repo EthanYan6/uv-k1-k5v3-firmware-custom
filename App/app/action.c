@@ -290,6 +290,8 @@ void ACTION_SwitchDemodul(void)
 
 void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 {
+    HideFKeyIcon();
+
     if (gScreenToDisplay == DISPLAY_MAIN && gDTMF_InputMode){
          // entering DTMF code
 
@@ -319,19 +321,23 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         return;
     }
 
-    enum ACTION_OPT_t funcShort = ACTION_OPT_NONE;
-    enum ACTION_OPT_t funcLong  = ACTION_OPT_NONE;
+    enum ACTION_OPT_t func = ACTION_OPT_NONE;
     switch(Key) {
         case KEY_SIDE1:
-            funcShort = gEeprom.KEY_1_SHORT_PRESS_ACTION;
-            funcLong  = gEeprom.KEY_1_LONG_PRESS_ACTION;
+            if (bKeyHeld)
+                func = gEeprom.KEY_1_LONG_PRESS_ACTION;
+            else
+                func = gEeprom.KEY_1_SHORT_PRESS_ACTION;
             break;
         case KEY_SIDE2:
-            funcShort = gEeprom.KEY_2_SHORT_PRESS_ACTION;
-            funcLong  = gEeprom.KEY_2_LONG_PRESS_ACTION;
+            if (bKeyHeld)
+                func = gEeprom.KEY_2_LONG_PRESS_ACTION;
+            else
+                func = gEeprom.KEY_2_SHORT_PRESS_ACTION;
             break;
         case KEY_MENU:
-            funcLong  = gEeprom.KEY_M_LONG_PRESS_ACTION;
+            if (bKeyHeld)
+                func = gEeprom.KEY_M_LONG_PRESS_ACTION;
             break;
         default:
             break;
@@ -347,17 +353,46 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     if(!(bKeyHeld && !bKeyPressed)) // don't beep on released after hold
         gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
-    if (bKeyHeld || bKeyPressed) // held
+    if (bKeyHeld && !bKeyPressed) // button released after hold
     {
-        funcShort = funcLong;
-
-        if (!bKeyPressed) //ignore release if held
-            return;
+        return;
     }
 
     // held or released after short press beyond this point
+    
+#ifdef ENABLE_FMRADIO
+    if (gFmRadioMode) { // do not run these actions in FM radio mode
+        switch (func) {
+            case ACTION_OPT_POWER:
+            case ACTION_OPT_MONITOR:
+            case ACTION_OPT_A_B:
+            case ACTION_OPT_VFO_MR:
+            case ACTION_OPT_SWITCH_DEMODUL:
+    #ifdef ENABLE_VOX
+            case ACTION_OPT_VOX:
+    #endif
+    #ifdef ENABLE_FEAT_F4HWN
+            case ACTION_OPT_RXMODE:
+            case ACTION_OPT_MAINONLY:
+            case ACTION_OPT_WN:
+        #ifdef ENABLE_FEAT_F4HWN_AUDIO
+            case ACTION_OPT_RXA:
+        #endif
+        #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+            case ACTION_OPT_POWER_HIGH:
+            case ACTION_OPT_REMOVE_OFFSET:
+        #endif
+    #endif
+                gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+                return;
 
-    action_opt_table[funcShort]();
+            default:
+                break;
+        }
+    }
+#endif
+
+    action_opt_table[func]();
 }
 
 
@@ -545,64 +580,36 @@ void ACTION_RxA(void)
 void ACTION_Ptt(void)
 {
     gSetting_set_ptt_session = !gSetting_set_ptt_session;
+
+    ACTION_Update();
 }
 
 void ACTION_Wn(void)
 {
-    if (gRxVfo->Modulation == MODULATION_AM)
+    const bool isRx = FUNCTION_IsRx();
+    VFO_Info_t *pVfo = isRx ? gRxVfo : gTxVfo;
+
+    pVfo->CHANNEL_BANDWIDTH = !pVfo->CHANNEL_BANDWIDTH;
+
+    if (pVfo->Modulation == MODULATION_AM)
     {
         BK4819_SetFilterBandwidth(BK4819_FILTER_BW_AM, true);
         return;
     }
+
+    uint8_t bw = pVfo->CHANNEL_BANDWIDTH;
+
     #ifdef ENABLE_FEAT_F4HWN_NARROWER
-        bool narrower = 0;
-        if (FUNCTION_IsRx())
+        if (isRx && bw == BANDWIDTH_NARROW && gSetting_set_nfm == 1)
         {
-            gRxVfo->CHANNEL_BANDWIDTH = (gRxVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
-            if(gRxVfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1)
-            {
-                narrower = 1;
-            }
-
-            #ifdef ENABLE_AM_FIX
-                BK4819_SetFilterBandwidth(gRxVfo->CHANNEL_BANDWIDTH + narrower, true);
-            #else
-                BK4819_SetFilterBandwidth(gRxVfo->CHANNEL_BANDWIDTH + narrower, false);
-            #endif
+            bw++; 
         }
-        else
-        {
-            gTxVfo->CHANNEL_BANDWIDTH = (gTxVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
-            if(gTxVfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1)
-            {
-                narrower = 1;
-            }
+    #endif
 
-            #ifdef ENABLE_AM_FIX
-                BK4819_SetFilterBandwidth(gTxVfo->CHANNEL_BANDWIDTH, true);
-            #else
-                BK4819_SetFilterBandwidth(gTxVfo->CHANNEL_BANDWIDTH, false);
-            #endif
-        }
+    #ifdef ENABLE_AM_FIX
+        BK4819_SetFilterBandwidth(bw, true);
     #else
-        if (FUNCTION_IsRx())
-        {
-            gRxVfo->CHANNEL_BANDWIDTH = (gRxVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
-            #ifdef ENABLE_AM_FIX
-                BK4819_SetFilterBandwidth(gRxVfo->CHANNEL_BANDWIDTH, true);
-            #else
-                BK4819_SetFilterBandwidth(gRxVfo->CHANNEL_BANDWIDTH, false);
-            #endif
-        }
-        else
-        {
-            gTxVfo->CHANNEL_BANDWIDTH = (gTxVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
-            #ifdef ENABLE_AM_FIX
-                BK4819_SetFilterBandwidth(gTxVfo->CHANNEL_BANDWIDTH, true);
-            #else
-                BK4819_SetFilterBandwidth(gTxVfo->CHANNEL_BANDWIDTH, false);
-            #endif
-        }
+        BK4819_SetFilterBandwidth(bw, false);
     #endif
 }
 

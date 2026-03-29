@@ -100,9 +100,21 @@ void SETTINGS_InitEEPROM(void)
 
             // 5. Reset dBmCorrTable
             int8_t buf[7];
-            for (uint8_t i = 0; i < 7; i++)
-                buf[i] = dBmCorrTable[i];  // values from misc.c
-            PY25Q16_WriteBuffer(0x00A0B9, buf, 7, false);
+            PY25Q16_ReadBuffer(0x00A0B9, (uint8_t *)buf, 7);
+
+            needsWrite = true;
+            for (uint8_t i = 0; i < 7; i++) {
+                if ((uint8_t)buf[i] != 0xFF) {
+                    needsWrite = false;
+                    break;
+                }
+            }
+
+            if (needsWrite) {
+                for (uint8_t i = 0; i < 7; i++)
+                    buf[i] = dBmCorrTable[i];
+                PY25Q16_WriteBuffer(0x00A0B9, buf, 7, false);
+            }
         }
     }
 
@@ -605,16 +617,20 @@ void SETTINGS_FetchChannelName(char *s, const uint16_t channel)
 
 void SETTINGS_FactoryReset(bool bIsAll)
 {
-    PY25Q16_SectorErase(0x000000);
-    PY25Q16_SectorErase(0x001000);
-    PY25Q16_SectorErase(0x002000);
-    PY25Q16_SectorErase(0x003000);
-    PY25Q16_SectorErase(0x004000);
-    PY25Q16_SectorErase(0x005000);
-    PY25Q16_SectorErase(0x006000);
-    PY25Q16_SectorErase(0x007000);
-    PY25Q16_SectorErase(0x008000);
-    PY25Q16_SectorErase(0x009000);
+    // PY25Q16_SectorErase(0x000000);
+    // PY25Q16_SectorErase(0x001000);
+    // PY25Q16_SectorErase(0x002000);
+    // PY25Q16_SectorErase(0x003000);
+    // PY25Q16_SectorErase(0x004000);
+    // PY25Q16_SectorErase(0x005000);
+    // PY25Q16_SectorErase(0x006000);
+    // PY25Q16_SectorErase(0x007000);
+    // PY25Q16_SectorErase(0x008000);
+    // PY25Q16_SectorErase(0x009000);
+
+    for (uint32_t addr = 0x000000; addr <= 0x009000; addr += 0x1000) {
+        PY25Q16_SectorErase(addr);
+    }
     
     // 0d60 - 0e30
     if (bIsAll)
@@ -750,7 +766,10 @@ void SETTINGS_SaveSettings(void)
     #ifdef ENABLE_FEAT_F4HWN_AUDIO
         State[0] = gSetting_set_audio;
     #endif
-    State[1] = gEeprom.SQUELCH_LEVEL;
+    if (gRequestSaveSquelch)
+    {
+        State[1] = gEeprom.SQUELCH_LEVEL;
+    }
     State[2] = gEeprom.TX_TIMEOUT_TIMER;
     #ifdef ENABLE_NOAA
         State[3] = gEeprom.NOAA_AUTO_SCAN;

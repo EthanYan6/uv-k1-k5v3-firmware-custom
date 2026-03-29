@@ -242,6 +242,7 @@ volatile uint16_t gScanPauseDelayIn_10ms;
 uint16_t          gMenuCountdown;
 bool              gPttWasReleased;
 bool              gPttWasPressed;
+bool              gHasVfoBackup;
 uint8_t           gKeypadLocked;
 bool              gFlagReconfigureVfos;
 uint8_t           gVfoConfigureMode;
@@ -249,6 +250,7 @@ bool              gFlagResetVfos;
 bool              gRequestSaveVFO;
 uint16_t          gRequestSaveChannel;
 bool              gRequestSaveSettings;
+bool              gRequestSaveSquelch;
 #ifdef ENABLE_FMRADIO
     bool          gRequestSaveFM;
 #endif
@@ -634,4 +636,16 @@ void MR_PrintCacheStats(void)
     //    cache_hits, cache_misses, MR_GetCacheHitRate());
 }
 
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
+    bool SCREENSHOT_IsLocked(void) 
+    {
+        if (gUART_LockScreenshot > 0) {
+            gUART_LockScreenshot--;
+            return true;
+        }
+        
+        return false;
+    }
 #endif

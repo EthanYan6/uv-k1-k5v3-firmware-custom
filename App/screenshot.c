@@ -22,7 +22,29 @@
 #include "driver/keyboard.h"
 #include "ui/ui.h"
 
-static void Screenshot_Send(const uint8_t *buf, uint16_t len)
+// SRAM optimization: minimize static allocations
+// - previousFrame: 1024 bytes (REQUIRED - need to compare for delta)
+// - No currentFrame or deltaFrame static buffers
+static uint8_t previousFrame[1024] = {0};
+static uint8_t forcedBlock = 0;
+static uint8_t keepAlive = 3;
+
+void SCREENSHOT_ParseInput(void)
+{
+    if (SCREENSHOT_IsLocked())
+        return;
+
+    if (UART_IsCableConnected()) {
+        keepAlive = 15;
+        gUSB_ScreenshotEnabled = false;
+    }
+    else if (VCP_ScreenshotPing()) {
+        keepAlive = 15;
+        gUSB_ScreenshotEnabled = true;
+    }
+}
+
+static void SCREENSHOT_Send(const uint8_t *buf, uint16_t len)
 {
     if (gUSB_ScreenshotEnabled) {
         cdc_acm_data_send_with_dtr(buf, len);
@@ -31,94 +53,57 @@ static void Screenshot_Send(const uint8_t *buf, uint16_t len)
     }
 }
 
-// SRAM optimization: minimize static allocations
-// - previousFrame: 1024 bytes (REQUIRED - need to compare for delta)
-// - No currentFrame or deltaFrame static buffers
-static uint8_t previousFrame[1024] = {0};
-static uint8_t forcedBlock = 0;
-static uint8_t keepAlive = 10;
+void SCREENSHOT_Line(uint8_t *src, uint8_t *dest, uint16_t *idx) {
+    for (uint8_t b = 0; b < 8; b++) {
+        for (uint8_t i = 0; i < 128; i += 8) {
+            uint8_t acc = 0;
+            for (uint8_t k = 0; k < 8; k++) {
+                if (src[i + k] & (1 << b)) acc |= (1 << k);
+            }
+            dest[(*idx)++] = gSetting_set_inv ? ~acc : acc;
+        }
+    }
+}
 
-void getScreenShot(bool force)
+void SCREENSHOT_Update(bool force)
 {
     // Build frame in a temporary stack buffer
     // This is 1024 bytes but it's temporary and gets freed after the function
     uint8_t frameBuffer[1024];
     uint16_t index = 0;
-    uint8_t acc = 0;
-    uint8_t bitCount = 0;
+    static bool wasConnected = false;
 
-    if (gUART_LockScreenshot > 0) {
-        gUART_LockScreenshot--;
+    if (SCREENSHOT_IsLocked())
         return;
-    }
-
-    if (UART_IsCableConnected()) {
-        keepAlive = 10;
-        gUSB_ScreenshotEnabled = false;
-    }
-
-    if (VCP_ScreenshotPing()) {
-        keepAlive = 10;
-        gUSB_ScreenshotEnabled = true;
-    }
 
     if (keepAlive > 0) {
-        if (--keepAlive == 0) return;
+        if (--keepAlive == 0) {
+            // Connection just lost → reset state for next reconnection
+            wasConnected = false;
+            return;
+        }
     } else {
         return;
+    }
+
+    // Connection is alive — detect reconnection and force full frame
+    if (!wasConnected) {
+        force = true;
+        wasConnected = true;
     }
 
     // ==== BUILD FRAME ONCE ====
-    // Dual VFO tight-top pages are physically displayed as gFrameBuffer[0..7].
-    // Legacy pages are displayed as gStatusLine + gFrameBuffer[0..6].
+    // Dual VFO tight-top: full screen in gFrameBuffer[0..7]. Else: gStatusLine + gFrameBuffer[0..6].
     const bool dualTightTop = UI_IsDualVfoMainScreen();
 
     if (dualTightTop) {
-        for (uint8_t l = 0; l < 8; l++) {
-            for (uint8_t b = 0; b < 8; b++) {
-                for (uint8_t i = 0; i < 128; i++) {
-                    uint8_t bit = (gFrameBuffer[l][i] >> b) & 0x01;
-                    acc |= (bit << bitCount++);
-                    if (bitCount == 8) {
-                        frameBuffer[index++] = acc;
-                        acc = 0;
-                        bitCount = 0;
-                    }
-                }
-            }
-        }
+        for (uint8_t l = 0; l < 8; l++)
+            SCREENSHOT_Line(gFrameBuffer[l], frameBuffer, &index);
     } else {
-        // Status line: 8 bit layers × 128 columns
-        for (uint8_t b = 0; b < 8; b++) {
-            for (uint8_t i = 0; i < 128; i++) {
-                uint8_t bit = (gStatusLine[i] >> b) & 0x01;
-                acc |= (bit << bitCount++);
-                if (bitCount == 8) {
-                    frameBuffer[index++] = acc;
-                    acc = 0;
-                    bitCount = 0;
-                }
-            }
-        }
-
-        // Frame buffer: 7 lines × 8 bit layers × 128 columns
-        for (uint8_t l = 0; l < 7; l++) {
-            for (uint8_t b = 0; b < 8; b++) {
-                for (uint8_t i = 0; i < 128; i++) {
-                    uint8_t bit = (gFrameBuffer[l][i] >> b) & 0x01;
-                    acc |= (bit << bitCount++);
-                    if (bitCount == 8) {
-                        frameBuffer[index++] = acc;
-                        acc = 0;
-                        bitCount = 0;
-                    }
-                }
-            }
-        }
+        SCREENSHOT_Line(gStatusLine, frameBuffer, &index);
+        for (uint8_t l = 0; l < 7; l++)
+            SCREENSHOT_Line(gFrameBuffer[l], frameBuffer, &index);
     }
-
-    if (bitCount > 0)
-        frameBuffer[index++] = acc;
 
     if (index != 1024)
         return;
@@ -156,7 +141,7 @@ void getScreenShot(bool force)
     // New format: sends 0xFF before header
     // Old format: doesn't exist, so viewers can differentiate
     uint8_t versionMarker = 0xFF;
-    Screenshot_Send(&versionMarker, 1);
+    SCREENSHOT_Send(&versionMarker, 1);
 
     // ==== Send header ====
     uint8_t header[5] = {
@@ -165,7 +150,7 @@ void getScreenShot(bool force)
         (uint8_t)(deltaLen & 0xFF)
     };
 
-    Screenshot_Send(header, 5);
+    SCREENSHOT_Send(header, 5);
 
     // ==== SECOND PASS: Send only changed chunks ====
     uint8_t chunk[9];
@@ -178,12 +163,12 @@ void getScreenShot(bool force)
         chunk[0] = chunkIdx;
         memcpy(&chunk[1], cur, 8);
         
-        Screenshot_Send(chunk, 9);
+        SCREENSHOT_Send(chunk, 9);
         
         // Update previousFrame for next comparison
         memcpy(prev, cur, 8);
     }
 
     uint8_t end = 0x0A;
-    Screenshot_Send(&end, 1);
+    SCREENSHOT_Send(&end, 1);
 }

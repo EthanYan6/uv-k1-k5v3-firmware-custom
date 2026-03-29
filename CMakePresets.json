@@ -60,6 +60,7 @@
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": false,
                 "ENABLE_FEAT_F4HWN_VOL": false,
                 "ENABLE_FEAT_F4HWN_AUDIO": false,
+                "ENABLE_FEAT_F4HWN_AUDIO_SCOPE": false,
                 "ENABLE_FEAT_F4HWN_RESET_VFO": true,
                 "ENABLE_FEAT_F4HWN_PMR": false,
                 "ENABLE_FEAT_F4HWN_GMRS_FRS_MURS": false,
@@ -69,8 +70,8 @@
                 "ENABLE_AGC_SHOW_DATA": false,
                 "ENABLE_UART_RW_BK_REGS": false,
                 "ENABLE_SWD": false,
-                "VERSION_STRING_1": "v5.2.0",
-                "VERSION_STRING_2": "v2.0.2"
+                "VERSION_STRING_1": "v5.3.0",
+                "VERSION_STRING_2": "v2.1.0"
             }
         },
         {
@@ -189,6 +190,7 @@
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": true,
                 "ENABLE_FEAT_F4HWN_VOL": true,
                 "ENABLE_FEAT_F4HWN_AUDIO": true,
+                "ENABLE_FEAT_F4HWN_AUDIO_SCOPE": true,
                 "ENABLE_SWD": true,
                 "EDITION_STRING": "Fusion",
                 "TARGET": "f4hwn.fusion"

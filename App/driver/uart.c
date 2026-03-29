@@ -25,9 +25,6 @@
 
 #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
 #include "driver/keyboard.h"
-// Packet types for serial key injection (K5Viewer → radio)
-#define UART_TYPE_KEY       0x03
-#define UART_TYPE_KEY_LONG  0x04
 #endif
 
 #define USARTx USART1
@@ -155,44 +152,24 @@ void UART_LogSend(const void *pBuffer, uint32_t Size)
 
 #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
     bool UART_IsCableConnected(void) {
+        static uint8_t     read_ptr = 0;
+        static ParseState_t state   = STATE_IDLE;
+
         bool connected = false;
 
-        for (size_t i = 0; i < sizeof(UART_DMA_Buffer); i++) {
-            uint8_t b = UART_DMA_Buffer[i];
+        // DMA write position: NbData counts DOWN from 256
+        uint8_t write_ptr = (uint8_t)(sizeof(UART_DMA_Buffer) - 
+                                       LL_DMA_GetDataLength(DMA1, DMA_CHANNEL));
 
-            if (b == 0x55) {
-                // Keepalive byte — viewer is alive
-                UART_DMA_Buffer[i] = 0x00;
+        uint8_t processed = 0;
+        while (read_ptr != write_ptr && processed < sizeof(UART_DMA_Buffer))
+        {
+            uint8_t b = UART_DMA_Buffer[read_ptr++];
+            // read_ptr wraps naturally at 256 since it's uint8_t
+            processed++;
+
+            if(KEYBOARD_ProcessProtocolByte(&state, b))
                 connected = true;
-            }
-            else if (b == 0xAA) {
-                // Possible start of a key packet: 0xAA 0x55 <type> <keycode>
-                // type 0x03 = short press, 0x04 = long press
-                size_t i1 = (i + 1) % sizeof(UART_DMA_Buffer);
-                size_t i2 = (i + 2) % sizeof(UART_DMA_Buffer);
-                size_t i3 = (i + 3) % sizeof(UART_DMA_Buffer);
-
-                if (UART_DMA_Buffer[i1] == 0x55 &&
-                    (UART_DMA_Buffer[i2] == UART_TYPE_KEY ||
-                     UART_DMA_Buffer[i2] == UART_TYPE_KEY_LONG))
-                {
-                    uint8_t type    = UART_DMA_Buffer[i2];
-                    uint8_t keyCode = UART_DMA_Buffer[i3];
-
-                    // Consume all 4 bytes
-                    UART_DMA_Buffer[i]  = 0x00;
-                    UART_DMA_Buffer[i1] = 0x00;
-                    UART_DMA_Buffer[i2] = 0x00;
-                    UART_DMA_Buffer[i3] = 0x00;
-
-                    if (type == UART_TYPE_KEY_LONG)
-                        KEYBOARD_InjectKeyLong(keyCode);
-                    else
-                        KEYBOARD_InjectKey(keyCode);
-
-                    connected = true;
-                }
-            }
         }
 
         return connected;

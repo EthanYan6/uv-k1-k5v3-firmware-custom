@@ -323,6 +323,8 @@ extern volatile bool         gTxTimeoutReached;
     #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
         extern volatile uint8_t  gUART_LockScreenshot; // lock screenshot if Chirp is used
         extern bool gUSB_ScreenshotEnabled;
+
+        bool SCREENSHOT_IsLocked(void);
     #endif
 #endif
 
@@ -366,12 +368,14 @@ extern AlarmState_t          gAlarmState;
 extern uint16_t              gMenuCountdown;
 extern bool                  gPttWasReleased;
 extern bool                  gPttWasPressed;
+extern bool                  gHasVfoBackup;
 extern bool                  gFlagReconfigureVfos;
 extern uint8_t               gVfoConfigureMode;
 extern bool                  gFlagResetVfos;
 extern bool                  gRequestSaveVFO;
 extern uint16_t              gRequestSaveChannel;
 extern bool                  gRequestSaveSettings;
+extern bool                  gRequestSaveSquelch;
 #ifdef ENABLE_FMRADIO
     extern bool              gRequestSaveFM;
 #endif
